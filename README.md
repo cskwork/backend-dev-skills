@@ -3,13 +3,34 @@
 > Turn any AI coding assistant into a **disciplined backend engineer**. Four opinionated, evidence-first skills (`/explore` → `/work` → `/verify` → `/qa-engineer`) that refuse to ship guesses — they demand citations, fresh test output, real `curl` proof, and a real browser trace before calling anything "done".
 
 <p align="center">
+  <a href="https://github.com/cskwork/backend-dev-skills/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/cskwork/backend-dev-skills?style=social"></a>
+  <a href="https://github.com/cskwork/backend-dev-skills/network/members"><img alt="GitHub forks" src="https://img.shields.io/github/forks/cskwork/backend-dev-skills?style=social"></a>
+  <a href="https://github.com/cskwork/backend-dev-skills/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/cskwork/backend-dev-skills"></a>
+  <a href="https://github.com/cskwork/backend-dev-skills/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/cskwork/backend-dev-skills"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green.svg"></a>
+</p>
+
+<p align="center">
   <img alt="Pure markdown" src="https://img.shields.io/badge/install-pure%20markdown-blue">
   <img alt="No runtime" src="https://img.shields.io/badge/runtime-none-lightgrey">
   <img alt="Works anywhere" src="https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex%20%7C%20Gemini%20%7C%20Cursor-purple">
+  <img alt="Stack agnostic" src="https://img.shields.io/badge/stack-agnostic-brightgreen">
 </p>
 
 **Works with:** Claude Code · OpenAI Codex · Gemini CLI · Cursor · Aider · Continue.dev · any agent that reads a prompt.
+
+## Table of contents
+
+- [The problem](#the-problem)
+- [The Iron Laws](#the-iron-laws)
+- [What each skill delivers](#what-each-skill-delivers)
+- [Quick start (90 seconds)](#quick-start)
+- [Folder contract (per ticket)](#folder-contract-per-ticket)
+- [Install — per-agent](#install--per-agent)
+- [Who this is for](#who-this-is-for)
+- [FAQ](#faq)
+- [Roadmap & contributing](#roadmap)
+- [License](#license)
 
 ---
 
@@ -104,6 +125,8 @@ When the agent is tempted to skip a phase, the skill refuses. That refusal is th
 ---
 
 ## Quick start
+
+<a name="quick-start"></a>
 
 Copy the skills, then invoke by name.
 
@@ -243,6 +266,8 @@ A: `/qa-engineer` covers deployed browser QA for any frontend. `/verify` is back
 
 ## Roadmap
 
+<a name="roadmap"></a>
+
 Contributions welcome — the pipeline generalizes further than one stack. Especially appreciated:
 
 - Alternate `implementation-playbook.md` variants: Node/TypeScript, Python (FastAPI/Django), Go, Rust, Kotlin
@@ -252,6 +277,15 @@ Contributions welcome — the pipeline generalizes further than one stack. Espec
 - Translations of the human-prose `docs/features|bugs/*.md` templates to other languages
 
 Open an issue or PR — happy to review and merge.
+
+### How to contribute
+
+1. Fork the repo
+2. For a new stack variant, copy the relevant reference file (e.g. `skills/work/implementation-playbook.md`) to a sibling with a stack suffix (`implementation-playbook.node.md`), edit, and open a PR
+3. For a bug in the core procedure, open an issue describing the failure mode and the agent that hit it
+4. Run `/explore` → `/work` → `/verify` on your own change (dogfood the pipeline)
+
+No CLA, no contributor-license boilerplate. MIT in, MIT out.
 
 ---
 
