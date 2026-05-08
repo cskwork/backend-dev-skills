@@ -34,10 +34,14 @@ If you introduce a new symbol, add it to the legend in this file. Do not invent 
 
 ## 1. Executive Summary *(human-readable, prose)*
 
-> Share as-is with non-developers. 5–10 lines. No file paths, no code, no symbols.
+> Korean-first for Korean users. Share as-is with non-developers. 5–10 lines. No file paths, no code, no symbols. Explain necessary technical terms in plain Korean.
+> When mirroring this in the final chat response, always use this order: `Executive Summary:` → `Recommended Change:` → `Rationale:` → `Terms:` → `Agent Findings:` → `Search Order:`. The `Executive Summary:` response must include this full §1 content in Markdown, not only the artifact path.
 
 - **Goal:** <what we were asked to do, one sentence>
 - **Finding:** <what we discovered, one to two sentences, plain language>
+- **Recommended Change:** <where to fix and what kind of change is recommended, in plain language>
+- **Rationale:** <why this conclusion follows; mention ruled-out hypotheses in plain language>
+- **Terms:** <term> = <plain-language meaning>; <term> = <plain-language meaning>  (omit only if no technical terms appear)
 - **Change:** <what will change from a user's perspective, one sentence>
 - **Risk:** <low/medium/high> — <one-sentence reason>
 - **Done when:** <the observable condition that confirms completion, one sentence>
@@ -63,9 +67,9 @@ one-liner: <verb-first ≤15 words>
 Format: `<path>:<line>  ·  <≤12-word note>`
 
 ```
-services/user-api/.../LoginController.java:42    · POST /login entry
-services/user-api/.../LoginService.java:118      · session issue + redirect
-services/user-api/.../UserMapper.xml:210         · update last_login_at
+example-api/.../LoginController.java:42    · POST /login entry
+example-api/.../LoginService.java:118      · session issue + redirect
+example-api/.../UserMapper.xml:210         · update last_login_at
 ```
 
 ---
@@ -260,11 +264,32 @@ flag:       recommended? y/n  · name: <flag>         · default: off
 
 ---
 
-## 12. Search Trail  *(optional, recommended for future reuse)*
+## 12. Exploration Steps & Reasoning
+
+Record the subagent exploration path and the reasoning that led to the conclusion. This section is required for non-trivial `/explore` work.
 
 ```
-grep "<term>" services/user-api/   N hits   · rel: <path>:<line>
-grep "<term>" services/admin-api/  N hits   · rel: <path>:<line>
+agents:
+  main      scope=classification+synthesis      steps=<read request, split scopes, reconcile evidence>      conclusion=<final>
+  agent-1   scope=<service/layer/hypothesis>     steps=<search terms/files opened>                           evidence=<file:line list>   conclusion=<kept/rejected/unknown>
+  agent-2   scope=<db/schema/path>               steps=<DDL/live DESCRIBE/mapper scan>                       evidence=<file:line or live tag>   conclusion=<...>
+
+reasoning:
+  R1 <hypothesis>   kept|rejected   because=<evidence file:line or live tag>
+  R2 <hypothesis>   kept|rejected   because=<evidence file:line or live tag>
+  final             <root-cause or feature-fit conclusion>   because=<R# chain>
+
+terms:
+  identifier = <plain-language meaning, e.g. stable value used to find the same record or screen again>
+  payload = <plain-language meaning, e.g. data bundle sent to a screen or server>
+  route context = <plain-language meaning, e.g. URL/state information that decides which screen opens>
+```
+
+Search trail:
+
+```
+grep "<term>" example-api/        N hits   · rel: <path>:<line>
+grep "<term>" admin-api/         N hits   · rel: <path>:<line>
 similar-feature scan "<term>"               · hit: <path>:<line>
 live: DESCRIBE user_login          ✓ dev-replica
 live: EXPLAIN <query>              ✓ uses idx_ul_user

@@ -1,38 +1,36 @@
 # Auth Reference (Adapt to Your Stack)
 
-Companion to `SKILL.md` Phase 2 and `curl-harness.md` preflight. Defines **how a local curl harness obtains a valid auth credential** for any endpoint that sits behind authentication.
+Companion to `SKILL.md` Phase 2 and `curl-harness.md` preflight. Defines **how a local curl harness obtains a valid auth credential** for endpoints behind authentication.
 
-> **Fork this file.** The core rules (no real tokens on disk, use a dev-only path, reuse the same token across same-signing-key services) are universal. The specific endpoints, claim names, and config keys are per-project — adapt them to your codebase before running `/verify`.
+> **Fork this file.** The core rules are universal: no real tokens on disk, prefer a dev-only credential path, and reuse one credential across services that trust the same authority. Endpoints, claim names, and config keys are project-specific.
 
 ## Core Principle
 
-> One authority mints credentials. Every service that trusts that authority (same signing key, same cookie domain, same OAuth issuer) accepts the same credential. Obtain it once; reuse.
+One authority mints credentials. Every service that trusts that authority, such as a shared signing key, cookie domain, or OAuth issuer, should accept the same credential. Obtain it once and reuse it.
 
-The skill's job is to fetch a credential cheaply and deterministically for local verification. It is not to simulate production auth flows.
+The skill fetches credentials cheaply and deterministically for local verification. It does not simulate production login flows.
 
----
+## Common Auth Schemes
 
-## Common Auth Schemes — Quick Reference
+Pick the section that matches your stack. In a real project, trim this file to the schemes that apply.
 
-Pick the section that matches your stack. Fork this file to narrow it to just yours and remove the rest.
-
-### Scheme A — JWT via a dev-profile "test-token" endpoint (recommended when it exists)
+### Scheme A: JWT via Dev Test-Token Endpoint
 
 Many backends expose a permit-all, dev-profile-only endpoint for local testing:
 
+```text
+GET /test/generate-jwt
+GET /dev/token
+POST /internal/test-token
 ```
-GET /test/generate-jwt   (or /dev/token, /internal/test-jwt, etc.)
-```
 
-- Auth: none (permit-all, dev profile only)
-- Response: JSON with a `token` (or `accessToken`) field
-- Extract with: `jq -r '.token // .accessToken // .data.accessToken'`
+- Auth: none, dev profile only
+- Response: JSON with `token`, `accessToken`, or `data.accessToken`
+- Extract with: `jq -r '.token // .accessToken // .data.accessToken // empty'`
 
-If such an endpoint does not exist, consider adding one guarded by profile (see §Adding a Dev Token Endpoint at the end of this file). It pays for itself after the first `/verify` run.
+If the service has no equivalent, consider adding one behind a dev-only profile. That usually pays for itself after the first `/verify` run.
 
-### Scheme B — OAuth2 client_credentials
-
-For service-to-service auth:
+### Scheme B: OAuth2 Client Credentials
 
 ```bash
 TOKEN=$(curl -sS --max-time 5 \
@@ -43,11 +41,9 @@ TOKEN=$(curl -sS --max-time 5 \
   | jq -r '.access_token')
 ```
 
-`CLIENT_ID` / `CLIENT_SECRET` / `OAUTH_TOKEN_URL` come from env vars or the project's `application-dev.yml`. Dev credentials are committed; production credentials are not.
+`CLIENT_ID`, `CLIENT_SECRET`, and `OAUTH_TOKEN_URL` come from environment variables or non-prod config. Production credentials never go into harness files.
 
-### Scheme C — Session cookie from a dev login endpoint
-
-For session-authenticated apps:
+### Scheme C: Session Cookie from Dev Login
 
 ```bash
 curl -sS -c cookies.txt \
@@ -56,18 +52,15 @@ curl -sS -c cookies.txt \
   -d '{"username":"dev-user","password":"dev-pass"}' \
   "${BASE_URL}/auth/login"
 
-# Subsequent requests use the cookie jar
 curl -b cookies.txt "${BASE_URL}/api/..."
 ```
 
-Delete `cookies.txt` at end of run. Never commit.
+Delete `cookies.txt` at the end of the run. Never commit it.
 
-### Scheme D — API key header
-
-For API-key-authenticated services:
+### Scheme D: API Key Header
 
 ```bash
-export API_KEY="${API_KEY:-}"   # from env var, never hardcoded
+export API_KEY="${API_KEY:-}"
 if [[ -z "${API_KEY}" ]]; then
   echo "PREFLIGHT FAIL: API_KEY env var is required" >&2
   exit 2
@@ -75,51 +68,45 @@ fi
 COMMON_HEADERS+=(-H "X-API-Key: ${API_KEY}")
 ```
 
-Dev-profile API keys may be committed as fixtures if the service treats them as public test keys; production keys never touch the repo.
+Dev fixture keys may be committed only when the project explicitly treats them as public test keys.
 
-### Scheme E — SSO (Keycloak / Auth0 / Okta / Azure AD / in-house)
+### Scheme E: SSO
 
 For SSO-gated services, prefer one of:
 
-- **Dev-profile bypass** (Scheme A) if your service offers it
-- **OAuth2 resource-owner-password flow** (Scheme B variant) against a dev tenant with a test user
-- **Interactive login once, save state** — for `/qa-engineer` (browser), never for `/verify` (curl)
+- Dev-profile token bypass, as in Scheme A
+- OAuth2 resource-owner or client-credentials flow against a dev tenant
+- Interactive login once and save browser state, for `/qa-engineer` only
 
-`/verify` is a fast-feedback loop; if SSO's interactive path is the only way in, add a dev-only bypass (Scheme A) — see §Adding a Dev Token Endpoint.
+`/verify` is a fast curl loop. If interactive SSO is the only path, add a dev-only credential endpoint instead of teaching the harness to drive a browser.
 
-### Scheme F — mTLS client certificate
+### Scheme F: mTLS Client Certificate
 
 ```bash
 curl --cert "${CLIENT_CERT_PATH}" --key "${CLIENT_KEY_PATH}" \
   "${BASE_URL}/api/..."
 ```
 
-Cert/key paths come from env vars. Never commit keys; `.gitignore` a local `certs/` directory.
+Certificate paths come from env vars. Never commit keys.
 
-### Scheme G — No auth (dev profile)
+### Scheme G: No Auth in Dev Profile
 
-Some services disable auth entirely in the `dev` profile. If so, assert the active profile is `dev` in `_preflight.sh` and skip token acquisition.
+Some services disable auth entirely in `dev`. If so, assert the active profile in `_preflight.sh` and skip token acquisition.
 
----
+## Harness Integration: Scheme A
 
-## Harness Integration Snippet (Scheme A — JWT dev endpoint)
-
-Paste into `harness/_env.sh` (adapt token path, claims, port to your service):
+Add this to `harness/_env.sh`, adapting names and paths:
 
 ```bash
-# ---- JWT — Scheme A (dev /test/generate-jwt or equivalent) -----------------
 export JWT_ISSUER_URL="${JWT_ISSUER_URL:-http://localhost:8080}"
 
-# Optional test-user claims; adjust to your service's dev-token controller
 export JWT_USER_ID="${JWT_USER_ID:-}"
 export JWT_USER_ROLE="${JWT_USER_ROLE:-}"
 export JWT_TENANT_ID="${JWT_TENANT_ID:-}"
 
-# DEV_LOGIN_PATH / DEV_LOGIN_METHOD read by _preflight.sh to obtain TOKEN
 export DEV_LOGIN_METHOD="GET"
 export DEV_LOGIN_PATH="/test/generate-jwt"
 
-# Query-string builder (only includes set params; avoids '&&' and trailing '&')
 _qs=""
 _add() { [[ -n "$2" ]] && _qs="${_qs:+${_qs}&}$1=$2"; }
 _add userId   "${JWT_USER_ID}"
@@ -128,7 +115,7 @@ _add tenantId "${JWT_TENANT_ID}"
 export DEV_LOGIN_QUERY="${_qs}"
 ```
 
-Update `harness/_preflight.sh` token acquisition block:
+Add this to `harness/_preflight.sh`:
 
 ```bash
 if [[ -z "${TOKEN}" && -n "${DEV_LOGIN_PATH:-}" ]]; then
@@ -145,38 +132,33 @@ if [[ -z "${TOKEN}" && -n "${DEV_LOGIN_PATH:-}" ]]; then
 fi
 ```
 
-Then any endpoint curl reuses the same `Authorization: Bearer ${TOKEN}` header (see `curl-harness.md` `<endpoint>.sh` template).
+Endpoint scripts then reuse `Authorization: Bearer ${TOKEN}`.
 
----
+## Cross-Service Reuse
 
-## Cross-Service Reuse Note
+If multiple services validate tokens signed by the same authority:
 
-If multiple services validate tokens signed with the **same** key (common in a monorepo where one service is the "auth authority"):
+- Mint once at the authority, such as `auth-service:8080/test/generate-jwt`
+- Reuse that token across downstream services that trust the same key or issuer
+- If a downstream rejects a token the authority accepts, first compare the signing key, JWKS URL, issuer, and audience config in each service's non-prod profile
 
-- Mint once at the authority (e.g. `auth-service:8080/test/generate-jwt`)
-- Reuse the token across any downstream service that trusts the same signing key
-- If a downstream rejects a token the authority accepts, the first thing to check is the `secret-key` / JWKS URL in each service's `application-dev.yml` — divergence is almost always the cause
-
-Record the cross-service token reuse pattern in your forked version of this file so operators don't re-mint per service.
-
----
+Record the project-specific pattern in your fork so operators do not re-mint per service.
 
 ## Anti-Patterns
 
-- **Hardcoding a token in a fixture file.** Tokens include `exp`. They go stale. Always derive them fresh via `_preflight.sh`.
-- **Minting a token offline when the service is running.** Offline minting requires matching the service's current secret exactly; if `application-dev.yml` is overridden, your offline token will be rejected. Prefer a live dev endpoint.
-- **Using production credentials for local verification.** The whole point of a dev token scheme is to keep prod credentials out of `/verify`'s blast radius. If you need prod creds to test locally, you need a dev-profile bypass — see below.
-- **Committing real secrets to `_env.sh`.** Dev-only, well-known secrets may be committed if the project treats them as public; production secrets never are.
+- Hardcoding a token in a fixture file. Tokens expire and may leak claims.
+- Minting offline when the service is running. Prefer the live dev endpoint so the signing config matches runtime.
+- Using production credentials for local verification.
+- Committing real secrets to `_env.sh`.
+- Saving interactive SSO cookies for `/verify`; that belongs in browser QA only.
 
----
+## Adding a Dev Token Endpoint
 
-## Adding a Dev Token Endpoint (when none exists)
-
-If `/verify` against your service is blocked by an interactive SSO flow, the right fix is a dev-profile-only permit-all token endpoint — not bypassing auth in the verify skill. Rough template (Spring Boot):
+When `/verify` is blocked by interactive auth, add a dev-profile-only token endpoint rather than bypassing auth in the skill. Spring Boot sketch:
 
 ```java
 @RestController
-@Profile("dev")  // present only in dev profile
+@Profile("dev")
 @RequestMapping("/test")
 public class DevTokenController {
 
@@ -191,26 +173,24 @@ public class DevTokenController {
     String token = tokens.issue(Map.of(
         "sub", Optional.ofNullable(userId).orElse("dev-user-001"),
         "role", Optional.ofNullable(userRole).orElse("USER"),
-        "tenantId", Optional.ofNullable(tenantId).orElse("t-dev"),
+        "tenantId", Optional.ofNullable(tenantId).orElse("tenant-dev"),
         "iat", Instant.now().getEpochSecond(),
         "exp", Instant.now().plusSeconds(3600).getEpochSecond()));
 
-    return Map.of("token", token, "userId", userId, "userRole", userRole);
+    return Map.of("token", token);
   }
 }
 ```
 
-Guarded by `@Profile("dev")`, the controller is absent in staging/prod builds. Make sure the dev profile's security config has an `/test/**` permit-all rule. Document the endpoint (method, path, query params, response shape) in this file's forked version.
-
----
+Guard it with a dev-only profile and a permit-all route in dev security config. Document method, path, params, and response shape in this file.
 
 ## When to Update This File
 
-- Dev token endpoint signature or path changes → update §Scheme A table.
-- Signing algorithm changes (e.g. HS256 → RS256) → update any offline-minting notes.
-- A new service joins with a *different* secret key → add to §Cross-Service Reuse.
-- A staging/audit profile gets a test endpoint added → flag it here so no one accidentally points the harness at it.
+- Dev token endpoint path or response shape changes
+- Signing algorithm, issuer, audience, or secret source changes
+- A new service joins with a different auth authority
+- A staging/test profile gets a special token endpoint and needs guardrails
 
 ## Bottom Line
 
-The cheapest auth is a dev-only permit-all endpoint that hands back a valid credential. One curl, one `jq`, one exported `${TOKEN}` — and every protected endpoint in `/verify`'s local probe becomes callable. Fork this file, trim it to your scheme, and commit the forked version with your skills.
+The cheapest local auth is a dev-only endpoint that returns a valid credential. One curl, one `jq`, one exported `${TOKEN}`, then every protected endpoint in `/verify` can be called with the same harness.

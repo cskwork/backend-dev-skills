@@ -1,6 +1,6 @@
 # Backend Dev Skills
 
-> Turn any AI coding assistant into a **disciplined backend engineer**. Four opinionated, evidence-first skills (`/explore` → `/work` → `/verify` → `/qa-engineer`) that refuse to ship guesses — they demand citations, fresh test output, real `curl` proof, and a real browser trace before calling anything "done".
+> Turn any AI coding assistant into a **disciplined backend engineer**. Five opinionated, evidence-first skills (`/reproduce` → `/explore` → `/work` → `/verify` → `/qa-engineer`) that refuse to ship guesses — they demand browser as-is proof, citations, fresh test output, real `curl` proof, and a real browser trace before calling anything "done".
 
 <p align="center">
   <a href="https://github.com/cskwork/backend-dev-skills/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/cskwork/backend-dev-skills?style=social"></a>
@@ -47,18 +47,18 @@ They will:
 - Declare "done" before ever running a real `curl`
 - Mark a deploy "live" before opening a browser
 
-These four skills encode the pipeline a senior backend engineer runs in their head — forced, step-by-step, into the agent.
+These five skills encode the pipeline a senior backend engineer runs in their head — forced, step-by-step, into the agent.
 
 ```
-┌──────────┐   ┌───────┐   ┌──────────┐   [deploy]   ┌──────────────┐
-│ /explore │─▶─│ /work │─▶─│ /verify  │────────────▶─│ /qa-engineer │
-└──────────┘   └───────┘   └──────────┘              └──────────────┘
-   evidence       code         local HTTP               deployed browser
-   before         with         proof                    E2E + repeatable
-   code           tests        (localhost)              Playwright suite
+┌────────────┐   ┌──────────┐   ┌───────┐   ┌──────────┐   [deploy]   ┌──────────────┐
+│ /reproduce │─▶─│ /explore │─▶─│ /work │─▶─│ /verify  │────────────▶─│ /qa-engineer │
+└────────────┘   └──────────┘   └───────┘   └──────────┘              └──────────────┘
+   browser as-is     evidence       code        local HTTP               deployed browser
+   before theory     before         with        proof                    E2E + repeatable
+                     code           tests       (localhost)              Playwright suite
 ```
 
-Each skill produces a **file-system artifact** (`explore.md`, `work.md`, `verify.md`, `qa.md` + `e2e/specs/*.spec.ts`) under a per-ticket folder, so future sessions — human or AI — can reload context without re-investigating, and the Playwright suite re-runs on every subsequent deploy.
+Each skill produces a **file-system artifact** (`reproduce.md`, `explore.md`, `work.md`, `verify.md`, `qa.md` + `e2e/specs/*.spec.ts`) under a per-ticket folder, so future sessions — human or AI — can reload context without re-investigating, and the Playwright suite re-runs on every subsequent deploy.
 
 ---
 
@@ -68,6 +68,7 @@ Every skill enforces hard stops. These are not suggestions.
 
 | Skill | Iron Law |
 |---|---|
+| `/reproduce` | **No code fix before the reported browser symptom is captured as-is, with Playwright output and artifact paths.** |
 | `/explore` | **No code changes until an evidence-based plan (with `file:line` citations) exists and is approved.** |
 | `/work` | **No "done" claim until fresh verification output is in hand AND paired docs are written.** |
 | `/verify` | **No "production-ready" claim until every assertion passes against a live local service with recorded `curl -i` evidence.** |
@@ -78,6 +79,16 @@ When the agent is tempted to skip a phase, the skill refuses. That refusal is th
 ---
 
 ## What each skill delivers
+
+### [`/reproduce`](./skills/reproduce/) — browser as-is proof before root-cause work
+
+5 phases. Produces `.backend/<YYYYMM>/<slug>/reproduce.md` with:
+
+- Exact user/ticket steps, target URL, account/role, and data identifiers
+- Focused Playwright as-is spec or script
+- Screenshots, console/page errors, request failures, relevant API responses, trace/video when available
+- Status semantics: `reproduced`, `not-reproduced`, `blocked-env`, `blocked-data`, `inconclusive`
+- A concrete handoff into `/explore` or `/work`
 
 ### [`/explore`](./skills/explore/) — evidence-based plan before any code
 
@@ -136,7 +147,7 @@ cd backend-dev-skills
 
 # Claude Code — native slash commands
 mkdir -p ~/.claude/skills
-cp -r skills/explore skills/work skills/verify skills/qa-engineer ~/.claude/skills/
+cp -r skills/reproduce skills/explore skills/work skills/verify skills/qa-engineer ~/.claude/skills/
 ```
 
 Open any project, type `/explore`, and start:
@@ -155,13 +166,14 @@ For other agents (Codex, Gemini, Cursor, Aider, …) see [the install guides](./
 
 ## Folder contract (per ticket)
 
-All four skills share a single workspace per ticket:
+All five skills share a single workspace per ticket:
 
 ```
 .backend/
   202604/                               ← YYYYMM month bucket
     add-bookmark-api/                   ← kebab-case slug (≤50 chars)
       explore.md                        ← /explore
+      reproduce.md                      ← /reproduce (optional pre-fix browser proof)
       work.md                           ← /work
       verify.md                         ← /verify
       qa.md                             ← /qa-engineer
@@ -182,6 +194,7 @@ All four skills share a single workspace per ticket:
         playwright.config.ts
         storageState.dev.json           ← redacted auth state per env
         specs/
+          <bug>-as-is.spec.ts           ← /reproduce focused as-is proof (optional)
           smoke.spec.ts                 ← <90s critical-path, re-run on every deploy
           <flow>.spec.ts                ← full happy/boundary/negative per flow
         scripts/<flow>.sh               ← playwright-cli probes (debug/teach)
@@ -194,7 +207,7 @@ All four skills share a single workspace per ticket:
             network.har
 ```
 
-This layout is **the contract** between the four skills. Any AI session (or human) opening the folder gets full context in under a minute, and `e2e/specs/` gives CI (or a human) a one-command post-deploy gate for every subsequent release.
+This layout is **the contract** between the five skills. Any AI session (or human) opening the folder gets full context in under a minute, and `e2e/specs/` gives CI (or a human) a one-command post-deploy gate for every subsequent release.
 
 ---
 
@@ -204,7 +217,7 @@ Skills are **just markdown prompts** — no binaries, no runtime. Copy them to t
 
 | Agent | Guide | Invocation |
 |---|---|---|
-| **Claude Code** | [install/claude-code.md](./install/claude-code.md) | `/explore`, `/work`, `/verify`, `/qa-engineer` |
+| **Claude Code** | [install/claude-code.md](./install/claude-code.md) | `/reproduce`, `/explore`, `/work`, `/verify`, `/qa-engineer` |
 | **OpenAI Codex / CLI** | [install/codex.md](./install/codex.md) | Append to `AGENTS.md` or paste per conversation |
 | **Gemini CLI** | [install/gemini.md](./install/gemini.md) | Append to `GEMINI.md` or paste per conversation |
 | **Cursor / Aider / other** | [install/generic.md](./install/generic.md) | Paste the system-prompt prefix, then each SKILL.md body |
@@ -242,7 +255,7 @@ Opinion lives in the **process** (cite `file:line`, re-grep before adding new co
 ## FAQ
 
 **Q: Isn't this overkill for a one-line fix?**
-A: Yes. All four skills have explicit "skip for typo fixes / config tweaks / doc changes" clauses. Use judgment. The skills exist for the *other* 95% of work where shortcuts cost incidents.
+A: Yes. All five skills have explicit "skip for typo fixes / config tweaks / doc changes" clauses. Use judgment. The skills exist for the *other* 95% of work where shortcuts cost incidents.
 
 **Q: I already have Cursor / Copilot — why these?**
 A: Those tools optimize for code-completion speed. These skills optimize for **not breaking production in a codebase the author has never seen before**. Different problem.

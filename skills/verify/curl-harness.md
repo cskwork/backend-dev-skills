@@ -9,17 +9,17 @@ Companion to `SKILL.md` Phase 2–3. The harness is the executable form of the v
 ## Layout
 
 ```
-.backend/<YYYYMM>/<slug>/harness/
+<artifact-root>/.backend/<YYYYMM>/<slug>/harness/
   _env.sh                 ← one per ticket; sourced by every endpoint script
   _assert.sh              ← one per ticket; bash assertion helpers
-  _preflight.sh           ← one per ticket; safety checks (local target, service reachable)
+  _preflight.sh           ← one per ticket; safety checks (target env, service reachable)
   <endpoint-slug>.sh      ← one per endpoint target; runs every variant
 ```
 
 `<endpoint-slug>` is a kebab-case rendering of METHOD + path, e.g.:
 
-- `POST /api/v1/auth/login` → `post-api-v1-auth-login.sh`
-- `GET /api/v1/items/{itemId}` → `get-api-v1-items-id.sh`
+- `POST /api/v1/users/login` → `post-api-v1-users-login.sh`
+- `GET /api/v1/content/{contentId}` → `get-api-v1-content-id.sh`
 
 One harness file per endpoint, not per variant. Variants are iterated inside the file.
 
@@ -32,15 +32,12 @@ All scripts are `chmod +x`. All scripts assume `set -euo pipefail`.
 # Environment for verify harness. DO NOT commit real tokens.
 # Regenerate by /verify Phase 2. Values here are session-scoped.
 
-# ---- Target (default localhost; remote envs require VERIFY_REMOTE_ACK) ----
+# ---- Target (local/dev by default; audit/stg require explicit opt-in) -----
 export BASE_URL="${BASE_URL:-http://localhost:8080}"
-export SERVICE_NAME="<your-service-name>"
+export SERVICE_NAME="example-api"
 export SERVICE_PROFILE="dev"
-
-# ---- Remote-env consent (set by caller; preflight reads, never persisted) -
-# VERIFY_REMOTE_ACK=<env>   one of: dev | stg | audit | prod   (matches BASE_URL host)
-# VERIFY_PROD_ACK=YYYYMMDD-HHMM  required per-request when env=prod
-# Both come from environment vars only. Do not hardcode here.
+export TARGET_ENV="${TARGET_ENV:-dev}"              # local | dev | audit | stg
+export ALLOW_AUDIT_STG_VERIFY="${ALLOW_AUDIT_STG_VERIFY:-0}"
 
 # ---- Auth (populated at runtime by _preflight.sh; never a real prod token)
 export TOKEN="${TOKEN:-}"                          # Bearer token if endpoint needs it
@@ -64,11 +61,11 @@ mkdir -p "${RUNS_DIR}"
 
 Values are emitted by Phase 2 based on:
 - `SERVICE_NAME` — derived from `work.md §4` touched services.
-- `BASE_URL` — defaults to localhost + port from the service's `CLAUDE.md` / `application-dev.yml` / `.env.dev` (match the project's convention — 8080, 3000, 8000, etc.). For remote envs, the caller exports `BASE_URL` and `VERIFY_REMOTE_ACK=<env>` per the Consent Record in `verify.md §0`.
-- `SERVICE_PROFILE` — dev unless the user specifies.
-- `TOKEN` — populated by `_preflight.sh` for localhost; for remote envs it must be exported by the caller (env var only) and is never written to the env file.
+- `BASE_URL` — localhost + port from the service's `CLAUDE.md` / profile config by default; audit/stg URLs or profile-bound localhost instances require explicit user instruction.
+- `SERVICE_PROFILE` — dev unless the user specifies another non-prod target.
+- `TOKEN` — populated by `_preflight.sh` (see below), not written to the env file.
 
-Never write real tokens into `_env.sh`. Localhost: preflight obtains them at run time. Remote: caller exports per-session.
+Never write real tokens into `_env.sh`. The preflight obtains them at run time.
 
 ## `_preflight.sh` Template
 
@@ -79,75 +76,56 @@ Runs before any variant. If any check fails, the whole harness aborts non-zero �
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/_env.sh"
 
-# 1. Classify target env. Remote envs require an explicit consent flag.
-LOCAL_RE='^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|host\.docker\.internal)(:[0-9]+)?(/|$)'
-if [[ "${BASE_URL}" =~ ${LOCAL_RE} ]]; then
-  TARGET_ENV="local"
-else
-  TARGET_ENV="${VERIFY_REMOTE_ACK:-}"
-  if [[ -z "${TARGET_ENV}" ]]; then
-    echo "PREFLIGHT FAIL: BASE_URL='${BASE_URL}' is non-local but VERIFY_REMOTE_ACK is unset." >&2
-    echo "  Record consent in verify.md §0, then export VERIFY_REMOTE_ACK=<dev|stg|audit|prod>." >&2
-    exit 2
-  fi
-  case "${TARGET_ENV}" in
-    dev|stg|audit|prod) : ;;
-    *) echo "PREFLIGHT FAIL: VERIFY_REMOTE_ACK='${TARGET_ENV}' invalid. Use dev|stg|audit|prod." >&2; exit 2 ;;
-  esac
-  if [[ "${TARGET_ENV}" == "prod" ]]; then
-    if [[ -z "${VERIFY_PROD_ACK:-}" ]]; then
-      echo "PREFLIGHT FAIL: prod requires per-request VERIFY_PROD_ACK=YYYYMMDD-HHMM." >&2
-      exit 2
-    fi
-    EXPECTED_ACK="$(date -u +%Y%m%d-%H%M)"
-    if [[ "${VERIFY_PROD_ACK}" != "${EXPECTED_ACK}" && "${VERIFY_PROD_ACK}" != "$(date -u -v-1M +%Y%m%d-%H%M 2>/dev/null || true)" ]]; then
-      echo "PREFLIGHT FAIL: VERIFY_PROD_ACK='${VERIFY_PROD_ACK}' is stale (expected ${EXPECTED_ACK})." >&2
-      echo "  Re-confirm with the user and re-export with the current minute stamp." >&2
-      exit 2
-    fi
-  fi
-fi
-export TARGET_ENV
-
-# 2. Service must be reachable. Probe the readiness endpoint.
-HEALTH_PATH="${HEALTH_PATH:-/actuator/health}"
-if ! curl -sS -o /dev/null -w "%{http_code}" --max-time 5 "${BASE_URL}${HEALTH_PATH}" | grep -q "^200$"; then
-  echo "PREFLIGHT FAIL: ${SERVICE_NAME} at ${BASE_URL} is not ready (${HEALTH_PATH} != 200)." >&2
+# 1. Target environment safety.
+if [[ "${TARGET_ENV}" == "prod" || "${BASE_URL}" =~ prod ]]; then
+  echo "PREFLIGHT FAIL: prod verification is forbidden. BASE_URL='${BASE_URL}' TARGET_ENV='${TARGET_ENV}'." >&2
   exit 2
 fi
 
-# 3. Profile check — local only. Remote envs are trusted to be the env the user named.
-if [[ "${TARGET_ENV}" == "local" ]]; then
-  if curl -sS -o /dev/null -w "%{http_code}" --max-time 3 "${BASE_URL}/actuator/info" | grep -q "^200$"; then
-    ENV_PROFILES=$(curl -sS --max-time 3 "${BASE_URL}/actuator/info" | jq -r '.activeProfiles // empty' 2>/dev/null || echo "")
-    if [[ -n "${ENV_PROFILES}" && "${ENV_PROFILES}" != *"${SERVICE_PROFILE}"* ]]; then
-      echo "PREFLIGHT FAIL: active profiles '${ENV_PROFILES}' do not include '${SERVICE_PROFILE}'." >&2
-      exit 2
-    fi
+if [[ "${TARGET_ENV}" =~ ^(audit|stg)$ ]]; then
+  if [[ "${ALLOW_AUDIT_STG_VERIFY}" != "1" ]]; then
+    echo "PREFLIGHT FAIL: ${TARGET_ENV} verification requires ALLOW_AUDIT_STG_VERIFY=1 and explicit user instruction." >&2
+    exit 2
+  fi
+elif ! [[ "${BASE_URL}" =~ ^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|host\.docker\.internal)(:[0-9]+)?(/|$) ]]; then
+  echo "PREFLIGHT FAIL: BASE_URL='${BASE_URL}' is not local and TARGET_ENV='${TARGET_ENV}' is not audit/stg. Aborting." >&2
+  exit 2
+fi
+
+# 2. Service must be reachable. Probe the readiness endpoint.
+if ! curl -sS -o /dev/null -w "%{http_code}" --max-time 3 "${BASE_URL}/actuator/health" | grep -q "^200$"; then
+  echo "PREFLIGHT FAIL: ${SERVICE_NAME} at ${BASE_URL} is not ready (health != 200)." >&2
+  exit 2
+fi
+
+# 3. Confirm profile when actuator info exposes it. If not exposed, skip this check and log a note.
+if curl -sS -o /dev/null -w "%{http_code}" --max-time 3 "${BASE_URL}/actuator/info" | grep -q "^200$"; then
+  ENV_PROFILES=$(curl -sS --max-time 3 "${BASE_URL}/actuator/info" | jq -r '.activeProfiles // empty' 2>/dev/null || echo "")
+  if [[ -n "${ENV_PROFILES}" && "${ENV_PROFILES}" != *"${SERVICE_PROFILE}"* ]]; then
+    echo "PREFLIGHT FAIL: active profiles '${ENV_PROFILES}' do not include '${SERVICE_PROFILE}'." >&2
+    exit 2
   fi
 fi
 
-# 4. Token acquisition.
-#    Local: auto-mint via dev JWT endpoint if DEV_LOGIN_PATH is set.
-#    Remote: TOKEN must be exported by caller (env var only). Preflight refuses to mint.
-if [[ -z "${TOKEN}" ]]; then
-  if [[ "${TARGET_ENV}" == "local" && -n "${DEV_LOGIN_PATH:-}" ]]; then
-    TOKEN=$(curl -sS --max-time 5 \
-      -X "${DEV_LOGIN_METHOD:-GET}" \
-      -H "Accept: application/json" \
-      "${JWT_ISSUER_URL:-${BASE_URL}}${DEV_LOGIN_PATH}${DEV_LOGIN_QUERY:+?$DEV_LOGIN_QUERY}" \
-      | jq -r '.token // .data.accessToken // .accessToken // empty')
-    if [[ -z "${TOKEN}" ]]; then
-      echo "PREFLIGHT FAIL: ${DEV_LOGIN_PATH} did not return a token. See jwt-auth-reference.md. Is ${SERVICE_NAME} running on ${JWT_ISSUER_URL:-${BASE_URL}} with the dev profile active?" >&2
-      exit 2
-    fi
-    export TOKEN
-  elif [[ "${TARGET_ENV}" != "local" ]]; then
-    echo "PREFLIGHT NOTE: TOKEN unset for remote env '${TARGET_ENV}'. Export it (env var) before running variants that need auth." >&2
+# 4. Obtain a dev JWT if this ticket's endpoints need one.
+#    Project default: GET /test/generate-jwt on example-api (permit-all in dev profile).
+#    See jwt-auth-reference.md for the exported env vars (JWT_ISSUER_URL,
+#    JWT_USER_ID, JWT_USER_TYPE, JWT_LCTR_CD, DEV_LOGIN_METHOD,
+#    DEV_LOGIN_PATH, DEV_LOGIN_QUERY) that this block expects.
+if [[ -z "${TOKEN}" && -n "${DEV_LOGIN_PATH:-}" ]]; then
+  TOKEN=$(curl -sS --max-time 5 \
+    -X "${DEV_LOGIN_METHOD:-GET}" \
+    -H "Accept: application/json" \
+    "${JWT_ISSUER_URL:-${BASE_URL}}${DEV_LOGIN_PATH}${DEV_LOGIN_QUERY:+?$DEV_LOGIN_QUERY}" \
+    | jq -r '.token // .data.accessToken // .accessToken // empty')
+  if [[ -z "${TOKEN}" ]]; then
+    echo "PREFLIGHT FAIL: ${DEV_LOGIN_PATH} did not return a token. See jwt-auth-reference.md in the /verify skill. Is example-api running on ${JWT_ISSUER_URL:-${BASE_URL}} with SPRING_PROFILES_ACTIVE=dev?" >&2
+    exit 2
   fi
+  export TOKEN
 fi
 
-echo "PREFLIGHT OK: ${SERVICE_NAME} @ ${BASE_URL}  env=${TARGET_ENV}  profile=${SERVICE_PROFILE}  auth=$([[ -n "${TOKEN}" ]] && echo present || echo none)"
+echo "PREFLIGHT OK: ${SERVICE_NAME} @ ${BASE_URL}  profile=${SERVICE_PROFILE}  auth=$([[ -n "${TOKEN}" ]] && echo present || echo none)"
 ```
 
 ## `_assert.sh` Template
@@ -239,8 +217,8 @@ source "${HERE}/_assert.sh"
 
 FIXTURES="$(cd "${HERE}/../fixtures" && pwd)"
 ENDPOINT_METHOD="POST"                       # filled by Phase 2 generator
-ENDPOINT_PATH="/api/v1/auth/login"           # filled by Phase 2 generator
-ENDPOINT_LABEL="post-api-v1-auth-login"      # filled by Phase 2 generator
+ENDPOINT_PATH="/api/v1/users/login"          # filled by Phase 2 generator
+ENDPOINT_LABEL="post-api-v1-users-login"     # filled by Phase 2 generator
 
 # Accumulate results; exit non-zero if any variant fails
 FAILED_VARIANTS=()
@@ -338,20 +316,20 @@ After executing all endpoint scripts in Phase 3, build the result matrix by scan
 
 ```
 endpoint                            variant     status  latency(ms)  assertions  result
-POST /api/v1/auth/login             happy       200     142          4/4         ✓
-POST /api/v1/auth/login             boundary    200     198          2/2         ✓
-POST /api/v1/auth/login             negative    400     89           2/2         ✓
-POST /api/v1/auth/login             regression  500     154          1/3         ✗
+POST /api/v1/users/login            happy       200     142          4/4         ✓
+POST /api/v1/users/login            boundary    200     198          2/2         ✓
+POST /api/v1/users/login            negative    400     89           2/2         ✓
+POST /api/v1/users/login            regression  500     154          1/3         ✗
 ```
 
 Copy this block verbatim into `verify.md §5 Results Matrix`. Do not summarize. Do not reorder.
 
 ## Cross-Service Probe Pattern
 
-If `work.md §7` declared a cross-service change (HTTP client / queue / SSE / WebSocket), add a **cross-service endpoint** entry to the harness that probes the downstream expectation:
+If `work.md §7` declared a Feign / Kafka / SSE change, add a **cross-service endpoint** entry to the harness that probes the downstream expectation:
 
-- **HTTP client (synchronous):** direct curl to the downstream service's corresponding endpoint with the payload the caller service would build. Confirms the downstream accepts the request the caller produces.
-- **Message queue (asynchronous):** start a consumer in a parallel process that tails the topic/queue with a timeout; publish via the producer endpoint; assert the message arrived with the expected shape. If no console consumer is available, document this as a `[GAP]` in `verify.md §9`.
+- **Feign (synchronous):** direct curl to the downstream service's corresponding endpoint with the payload the caller service would build. Confirms the downstream accepts the request the caller produces.
+- **Kafka (asynchronous):** start a consumer in a parallel process that tails the topic with a timeout; publish via the producer endpoint; assert the message arrived with the expected shape. If no console consumer is available, document this as a `[GAP]` in `verify.md §9`.
 - **SSE / WebSocket:** use `curl -N` (SSE) or a tiny `websocat` probe (WS) with a 5s timeout. Assert the first event's shape. Kill after the assertion.
 
 Do not try to replicate every downstream — probe only the edges `work.md §7` lists as changed.
@@ -373,14 +351,13 @@ After Phase 5 re-invokes `/work`:
 
 ## What the Harness Never Does
 
-- Never runs against stg/audit/prod **without `VERIFY_REMOTE_ACK` set per the Consent Record** in `verify.md §0`. Preflight enforces. Prod additionally requires per-request `VERIFY_PROD_ACK=YYYYMMDD-HHMM`.
-- Never persists remote-env tokens to `_env.sh` or any file. Caller exports them as env vars per session.
+- Never runs against prod. Audit/stg require `TARGET_ENV=audit|stg`, `ALLOW_AUDIT_STG_VERIFY=1`, and explicit user instruction recorded in `verify.md`.
 - Never writes production-like data to dev DB at scale (bulk inserts, load tests). Scope is functional verification, not load.
-- Never stores real tokens or real PII. Redaction is enforced at write time — and is **mandatory** for any capture from a remote env.
+- Never stores real tokens or real PII. Redaction is enforced at write time.
 - Never retries a failed variant "just in case". A failure is a signal for Phase 4 triage, not a transient to hide.
 - Never modifies source files. `/verify` is read-only on `src/` and `test/`.
 - Never opens a PR, pushes a branch, or updates a ticket. Those are post-skill user actions.
 
 ## Bottom Line
 
-The harness is the executable contract. It is the difference between "I think it works" and "run this file and see for yourself." Keep it reproducible, scoped (localhost by default; remote envs only via the consent gate), redacted, and bounded. When it exits zero, you have earned the right to claim the change is production-ready — and not a line sooner.
+The harness is the executable contract. It is the difference between "I think it works" and "run this file and see for yourself." Keep it reproducible, target-bounded, redacted, and time-bounded. When it exits zero, you have earned the right to claim the change is production-ready — and not a line sooner.

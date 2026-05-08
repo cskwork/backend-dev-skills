@@ -2,17 +2,17 @@
 
 > Phase-0 / Phase-1 companion to `SKILL.md`. Defines which environments `/qa-engineer` may target, the safety preflight checks, and the per-env constraints. The symmetric counterpart to `verify/curl-harness.md §Preflight` — where `/verify` refuses any non-localhost URL, `/qa-engineer` refuses **localhost** and has tighter controls for higher environments.
 
-## Environment Matrix (fork to match your env URLs)
+## Project Environment Matrix
 
 | Env | Purpose | Who uses it | Typical URL pattern | Auth | `/qa-engineer` allowed? | Default posture |
 |---|---|---|---|---|---|---|
-| `local` / `localhost` | Developer loopback | Engineer | `http://localhost:{3000-8080}` | Dev JWT injection | **No — use `/verify`** | Refuse |
-| `dev` | Integration, engineer smoke | Engineers, QA | `https://dev-<svc>.example.com` | Dev JWT OR SSO test account | Yes | Default target |
-| `stg` | Stakeholder preview, pre-release | QA, PO | `https://stg-<svc>.example.com` | SSO test account | Yes | Read+write OK (test tenant) |
-| `audit` | Audit/compliance rehearsal | Auditors, SRE | `https://audit-<svc>.example.com` | SSO test account | Yes (sparingly) | Read-only unless user explicitly authorizes writes |
-| `prod` | Real end users | End users | `https://<svc>.example.com` | SSO real or test account | Yes with guardrails | **Read-only by default**, writes require per-step consent |
+| `local` / `localhost` | Developer loopback | Engineer | `http://localhost:{5173-5180}` | Dev JWT injection | **No — use `/verify`** | Refuse |
+| `dev` | Integration, engineer smoke | Engineers, QA | `https://dev-<service>.example.test` | Dev JWT OR SSO test account | Yes | Default target |
+| `stg` | Stakeholder preview, pre-release | QA, PO | `https://stg-<service>.example.test` | SSO provider test account | Yes | Read+write OK (test tenant) |
+| `audit` | Audit/compliance rehearsal | Auditors, SRE | `https://audit-<service>.example.test` | SSO provider test account | Yes (sparingly) | Read-only unless user explicitly authorizes writes |
+| `prod` | Real students, teachers, schools | End users | `https://<service>.example.com` | SSO provider real or test account | Yes with guardrails | **Read-only by default**, writes require per-step consent |
 
-URLs are placeholders — resolve from the user's answer and/or the service's `CLAUDE.md`. Fork this file to match your org's actual env hostname patterns.
+URLs are placeholder — resolve from the user's answer and/or the service's `CLAUDE.md`.
 
 ## Preflight Checks (Phase 1)
 
@@ -113,11 +113,11 @@ Specs that require writes on prod must:
 
 ### Forbidden on prod — always
 
-- Any destructive operation (DELETE on user data, drop resource, delete item).
+- Any destructive operation (DELETE on user data, drop class, delete lesson).
 - Any action that sends notifications to real end users (mass email, SMS, push).
 - Any action that triggers a billable external call.
 - Any action that modifies admin-level config (role assignments, feature flags).
-- Taking a screenshot that includes PII from a real end user — redact immediately or discard.
+- Taking a screenshot that includes PII from a real student or teacher — redact immediately or discard.
 
 If a flow legitimately requires one of these on prod, it is out of scope for `/qa-engineer` — escalate to the engineering lead for a purpose-built procedure.
 
@@ -137,7 +137,7 @@ QA_PROD_CONSENT=yes-$TICKET_SLUG QA_ENV=prod BASE_URL=<prod> \
   --output=artifacts/run-$(date +%Y%m%d-%H%M)-prod
 ```
 
-Record parity outcomes in `qa.md §5` side-by-side. A spec that passes dev + stg but fails prod is usually a config/secrets issue (different encrypted property value, different cache cluster, different SSO endpoint per env).
+Record parity outcomes in `qa.md §5` side-by-side. A spec that passes dev + stg but fails prod is usually a config/secrets issue (different Jasypt-encrypted property, different Redis cluster, different SSO provider endpoint per env).
 
 ## Per-Env Fixture Strategy
 
@@ -146,21 +146,21 @@ Different envs have different tenant data shapes. A fixture hardcoded to a dev t
 ```typescript
 // e2e/fixtures/env-tenants.ts
 const tenants = {
-  dev:   { orgId: 1001, adminId: 'test-admin-001', memberId: 'test-member-001' },
-  stg:   { orgId: 5001, adminId: 'stg-admin-001',  memberId: 'stg-member-001' },
-  audit: { orgId: 7001, adminId: 'aud-admin-001',  memberId: 'aud-member-001' },
-  prod:  { orgId: 9001, adminId: 'qa-admin-001',   memberId: 'qa-member-001' },  // QA-dedicated accounts
+  dev:   { classId: 1001, teacherId: 'test-t-001', studentId: 'test-s-001' },
+  stg:   { classId: 5001, teacherId: 'stg-t-001',  studentId: 'stg-s-001' },
+  audit: { classId: 7001, teacherId: 'aud-t-001', studentId: 'aud-s-001' },
+  prod:  { classId: 9001, teacherId: 'qa-t-001',   studentId: 'qa-s-001' },  // QA-dedicated accounts
 };
 export const currentTenant = tenants[process.env.QA_ENV as keyof typeof tenants];
 ```
 
 Tenant IDs per env are provided by the user once, persisted in `e2e/fixtures/env-tenants.ts`, and NEVER contain real user IDs.
 
-## SSO Session Lifetime
+## SSO provider Session Lifetime
 
 Captured `storageState.<env>.json` has a finite lifetime. Typical:
 - dev JWT: 2 hours (see `verify/jwt-auth-reference.md`).
-- stg / audit / prod SSO session: 30–60 min depending on the SSO provider's config.
+- stg / audit / prod SSO session: 30-60 min depending on SSO provider config.
 
 On spec run start, check session freshness. If older than 15 min, re-run `_login.sh` to refresh. Otherwise the first spec will fail with a 401/302 to the SSO page and the whole run wastes time.
 

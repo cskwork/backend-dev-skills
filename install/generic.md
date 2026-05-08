@@ -15,11 +15,12 @@ Paste this at the top of your conversation (or into your agent's system prompt):
 
 ```
 You will assist with backend/fullstack development tasks using a disciplined
-4-skill pipeline. The skills are `explore`, `work`, `verify`, and `qa-engineer`.
+5-skill pipeline. The skills are `reproduce`, `explore`, `work`, `verify`, and `qa-engineer`.
 
-When the user asks for a feature, bug fix, verification, or post-deploy QA:
+When the user asks for browser reproduction, a feature, bug fix, verification, or post-deploy QA:
 
 1. Identify which skill applies:
+   - "reproduce <thing>" / UI-visible bug before coding   → /reproduce
    - "explore <thing>" / new feature / bug report       → /explore
    - "work on <thing>" / approved plan exists           → /work
    - "verify <thing>" / code is written (localhost)     → /verify
@@ -32,6 +33,7 @@ When the user asks for a feature, bug fix, verification, or post-deploy QA:
    cannot cite, you do not know — say so explicitly.
 
 4. The output artifacts are files on disk:
+   - /reproduce   writes `.backend/<YYYYMM>/<slug>/reproduce.md` + screenshots/network/Playwright artifacts
    - /explore      writes `.backend/<YYYYMM>/<slug>/explore.md`
    - /work         writes `work.md` + `docs/features|bugs/<date>-<slug>.md`
    - /verify       writes `verify.md` + `harness/*.sh` + `fixtures/*.json` + `runs/run-<N>.log`
@@ -41,6 +43,7 @@ When the user asks for a feature, bug fix, verification, or post-deploy QA:
    only into chat — it must land on disk under the correct path.
 
 5. Iron laws (violating these is a skill failure, not a stylistic choice):
+   - No code fix before /reproduce records as-is browser evidence for UI-visible bugs
    - No code changes until /explore has produced an approved explore.md
    - No "done" claim until fresh verification output is in hand
    - No "production-ready" claim until /verify says `status: pass`

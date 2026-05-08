@@ -18,7 +18,7 @@ If the user pasted a payload (in the current conversation, in a Jira ticket, in 
 
 Save unchanged to `fixtures/<endpoint>.user-<label>.json`, except:
 - Replace real auth tokens with `__REDACTED_TOKEN__`.
-- Replace real email / phone / national-ID with the placeholders in §Redaction below.
+- Replace real email / phone / national ID with the placeholders in §Redaction below.
 - Keep nulls, empty strings, trailing whitespace, and weird casing exactly as provided — those are the bug signal.
 
 Record the source in `verify.md §4`:
@@ -105,10 +105,10 @@ Apply to every file written under `.backend/<YYYYMM>/<slug>/fixtures/` and every
 |---|---|---|
 | Email | `[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}` | `user+<rowIdx>@example.test` |
 | Phone | `01[016-9]-?\d{3,4}-?\d{4}` | `010-0000-<seq>` (seq = 0001, 0002, …) |
-| National-ID (e.g. SSN, RRN, NIN) | pattern-specific | `__REDACTED_ID__` |
-| Passport / alien-registration / other national ID | pattern-specific | `__REDACTED_ID__` |
-| Personal name | mapped via `explore.md §4 cols`  | `user<rowIdx>` |
-| Organization name | mapped via `explore.md §4 cols` | `org<rowIdx>` |
+| national ID | `\d{6}-?\d{7}` | `__REDACTED_ID__` |
+| Passport / national ID | pattern-specific | `__REDACTED_ID__` |
+| Student name (Korean) | mapped via `explore.md §4 cols`  | `student<rowIdx>` |
+| School name | mapped via `explore.md §4 cols` | `school<rowIdx>` |
 | Authorization header value | exact match `Bearer <token>` | `Bearer __REDACTED__` |
 | Session cookie | cookie name from `application-dev.yml` | `__REDACTED__` |
 | API keys / secrets | Jasypt `ENC(...)`, `sk_*`, `AKIA*` | `__REDACTED_SECRET__` |
@@ -136,7 +136,7 @@ If the endpoint behavior depends on tenant / role / partition, add one variant p
 
 Endpoints that fan out to other services (Feign clients called inside the handler) need payloads that exercise the downstream path:
 
-- If the handler calls a downstream service for metadata, include an id in the payload that **actually exists** in the downstream's local DB sample. A happy-path payload with a nonexistent downstream id tests a 404 path, not the real behavior.
+- If the handler calls `content-service` for content metadata, include a content id in the payload that **actually exists** in the local content DB sample. A happy-path payload with a nonexistent downstream id tests a 404 path, not the real behavior.
 - Record in `verify.md §6 Cross-Service Checks` which downstream ids were used and how they were sourced.
 
 ## DB-Write Safety
@@ -151,7 +151,7 @@ Endpoints that fan out to other services (Feign clients called inside the handle
 ## Anti-Patterns
 
 - **Payload drift.** Copy-pasting last week's payload for a new endpoint without re-mapping to this endpoint's request DTO. Re-derive every time; cite the DTO file:line.
-- **Faking locale.** Using `"홍길동"` as a placeholder Korean name while the real column contains `"김*훈"`-style masked audit values. Mirror the real shape including already-masked forms.
+- **Faking locale.** Using a generic placeholder name while the real column contains already-masked localized values. Mirror the real shape, including already-masked forms.
 - **Invented enums.** The DTO says `enum {A,B,C}` but live data uses `A`, `A_LEGACY`, and `UNKNOWN`. Sample the DB for actual values; don't trust the DTO alone.
 - **Committing PII** because "the folder is `.backend/` so it's local". `.backend/` files can be pushed, emailed, screenshared. Redaction is unconditional.
 - **`SELECT *`** into a fixture file. Read only the columns the endpoint consumes. `SELECT *` leaks PII fields you had no intent to use.

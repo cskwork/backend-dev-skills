@@ -26,29 +26,29 @@ When a flow's contract changes (endpoint shape changed in `/verify`, UI route mo
 
 Example — OK:
 ```diff
-  test('happy — add member to project', async ({ page }) => {
-    await page.goto('/projects/1001');
--   await page.getByRole('button', { name: 'Add member' }).click();
-+   await page.getByRole('button', { name: 'Invite member' }).click();  // qa:2026-05-03 button label change
-    await page.getByTestId('member-picker').selectOption('user-42');
-    await expect(page.getByTestId('member-count')).toContainText('1');
+  test('happy — assign student to class', async ({ page }) => {
+    await page.goto('/class/1001');
+-   await page.getByRole('button', { name: 'Add student' }).click();
++   await page.getByRole('button', { name: 'Assign student' }).click();  // qa:2026-05-03 button label change
+    await page.getByTestId('student-picker').selectOption('user-42');
+    await expect(page.getByTestId('roster-count')).toContainText('1');
   });
 ```
 
 Example — NOT OK (reformat + unrelated refactor sneaked in):
 ```diff
-- test('happy — add member to project', async ({ page }) => {
--   await page.goto('/projects/1001');
--   await page.getByRole('button', { name: 'Add member' }).click();
--   await page.getByTestId('member-picker').selectOption('user-42');
--   await expect(page.getByTestId('member-count')).toContainText('1');
+- test('happy — assign student to class', async ({ page }) => {
+-   await page.goto('/class/1001');
+-   await page.getByRole('button', { name: 'Add student' }).click();
+-   await page.getByTestId('student-picker').selectOption('user-42');
+-   await expect(page.getByTestId('roster-count')).toContainText('1');
 - });
-+ test('happy path — member add', async ({ page }) => {  // renamed — bad
-+   await page.goto('/projects/1001');
-+   const btn = page.getByRole('button', { name: 'Invite member' });
++ test('happy path — student assignment', async ({ page }) => {  // renamed — bad
++   await page.goto('/class/1001');
++   const btn = page.getByRole('button', { name: 'Assign student' });
 +   await btn.click();  // extracted to var — unrelated — bad
-+   await page.locator('[data-testid="member-picker"]').selectOption('user-42');  // locator style change — bad
-+   expect(await page.getByTestId('member-count').textContent()).toContain('1');  // assertion pattern change — bad
++   await page.locator('[data-testid="student-picker"]').selectOption('user-42');  // locator style change — bad
++   expect(await page.getByTestId('roster-count').textContent()).toContain('1');  // assertion pattern change — bad
 + });
 ```
 
@@ -59,9 +59,9 @@ A spec whose feature was removed from the product goes through this path:
 1. Verify the removal is intentional by reading `/work`'s most recent `work.md §4` entry — the feature removal must be explicitly logged there.
 2. Mark the spec `.skip` in place with a breadcrumb comment:
    ```typescript
-   test.skip('happy — legacy activity view', async ({ page }) => {
+   test.skip('happy — legacy attendance view', async ({ page }) => {
      // [REMOVED-FEATURE qa:2026-08-14]
-     // Flow removed per work.md 2026-08-14 §4 row 3 — legacy activity view deprecated for new timeline widget.
+     // Flow removed per work.md 2026-08-14 §4 row 3 — legacy attendance view deprecated for new calendar widget.
      // Kept as .skip for 2 release cycles in case of rollback. Delete after 2026-10-14 if not needed.
    });
    ```
@@ -75,7 +75,7 @@ Silent deletion erases audit trail. Future operators lose the evidence that a fl
 `e2e/specs/smoke.spec.ts` is the post-deploy gate. It must:
 - Complete in **under 90 seconds** (excluding the `_login.sh` bootstrap).
 - Contain **only happy-path variants**, one per critical flow.
-- Have **no external dependencies** beyond services the deployed env itself owns (mock or stub any uncontrolled third-party).
+- Have **no external dependencies** (no real third-party API calls beyond those the deployed project env owns).
 - Always record `trace: on` and `video: on` (not just on failure).
 
 When the smoke suite grows beyond 90s, split: move lower-criticality flows out to a separate `specs/regression-<date>.spec.ts` and keep smoke lean. Do not relax the 90s target — a smoke suite people don't run is worse than no smoke suite.
@@ -83,8 +83,8 @@ When the smoke suite grows beyond 90s, split: move lower-criticality flows out t
 The user (or CI) re-runs smoke after every deploy:
 ```bash
 cd .backend/<YYYYMM>/<slug>/e2e
-QA_ENV=dev  npx playwright test specs/smoke.spec.ts
-QA_ENV=stg  npx playwright test specs/smoke.spec.ts
+QA_ENV=dev npx playwright test specs/smoke.spec.ts
+QA_ENV=stg npx playwright test specs/smoke.spec.ts
 QA_ENV=prod npx playwright test specs/smoke.spec.ts  # only if prod QA is authorized
 ```
 
@@ -97,9 +97,9 @@ A ticket that gets re-QA'd across 3 deploys (dev → stg → prod) typically end
 ```
 e2e/specs/
   smoke.spec.ts                ← 4-6 happy paths, <90s
-  login.spec.ts                ← happy + negative
-  create-item.spec.ts          ← happy + boundary + negative + regression
-  realtime-room.spec.ts        ← happy + WebSocket assertion
+  login-sso.spec.ts            ← happy + negative
+  assign-class.spec.ts         ← happy + boundary + negative + regression
+  live-attendance.spec.ts      ← happy + WebSocket assertion
   broadcast.spec.ts            ← happy + SSE assertion
 ```
 
@@ -107,9 +107,9 @@ After one prod hotfix:
 ```
 e2e/specs/
   smoke.spec.ts
-  login.spec.ts
-  create-item.spec.ts
-  realtime-room.spec.ts
+  login-sso.spec.ts
+  assign-class.spec.ts
+  live-attendance.spec.ts
   broadcast.spec.ts
   hotfix-2026-05-12.spec.ts    ← regression variant covering the prod-only symptom
 ```
@@ -145,9 +145,9 @@ When a variant shows `pass,fail,pass` under the 3-attempt protocol (SKILL.md Pha
 2. **Do not** mark the spec `.skip`. Skipping hides flakes.
 3. **Do not** add arbitrary `waitForTimeout` calls. Those mask flakes rather than fixing them.
 4. **Do** investigate:
-   - Is the underlying flow itself flaky (a real race condition users can hit)? → Escalate to `/work` as FAIL-UI / FAIL-BACKEND.
+   - Is the underlying flow itself flaky (real race condition users can hit)? → Escalate to `/work` as FAIL-UI / FAIL-BACKEND.
    - Is the assertion timing-sensitive (the UI takes a variable time to settle)? → Switch from instantaneous assertion to `expect(locator).toBeVisible({ timeout: 10_000 })` — scoped timeout, not global sleep.
-   - Is the env itself flaky (a given deploy-env has known instability)? → Record in `[FLAKE]` with env as root cause; prod run still must pass without flake.
+   - Is the env itself flaky (stg backend has known instability)? → Record in `[FLAKE]` with env as root cause; prod run still must pass without flake.
 5. A flake that persists 3 runs in a row across different days is not a flake — it is a failure mode. Re-classify as FAIL-UI or FAIL-BACKEND and escalate.
 
 ## Never

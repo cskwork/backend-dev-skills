@@ -50,26 +50,26 @@ Record the chosen alternative and the file:line of each existing caller in your 
 
 For each proposed new symbol, re-run the core search. The explore report's search was done at time T; you are at T+Δ.
 
-- [ ] **Verb re-search** — the primary verb of the helper (`format`, `normalize`, `validate`, `parse`, `convert`, `build`, `create`). Note current hits across **all services in the repo**, not just the target one.
-- [ ] **Noun re-search** — the domain noun (`Jwt`, `Session`, `Order`, `Invoice`, `Customer`, `User`, etc.).
+- [ ] **Verb re-search** — the primary verb of the helper (`format`, `normalize`, `validate`, `parse`, `convert`, `build`, `create`). Note current hits across all project services, not just the target one.
+- [ ] **Noun re-search** — the domain noun (`Jwt`, `Session`, `Chapter`, `Worksheet`, `Course`, `Class`, `User`, etc.).
 - [ ] **Synonym pass** — at least 2 synonyms (`build`↔`create`, `check`↔`validate`, `toX`↔`fromX`, `get`↔`fetch`, `load`↔`find`).
-- [ ] **Cross-service utility folders** — grep `**/util/**`, `**/common/**`, `**/support/**`, `**/helper/**`, `**/service/**` across *every* service module, not just the target service.
+- [ ] **Cross-service utility folders** — grep `**/util/**`, `**/common/**`, `**/support/**`, `**/helper/**`, `**/service/**` in *every* `example-*-api` and `example-*-was` module, not just the target service.
 - [ ] **Semantic match, not just name match** — a `UserDto` that exists is NOT a match if the new usage has different required fields or different meaning. Reusing a type with wrong semantics is worse than adding a new one.
 - [ ] **Decision:**
   - If a match was found that the explore report missed → **stop.** Amend the plan to `reuse` or `extend` this match; inform the user the plan shifted.
   - If no match was found → proceed with `new`, and record the exact search terms you ran so `work.md` can prove the search was performed.
 
-## Cross-Service Reuse Checks
+## Project Cross-Service Checks
 
-Legacy codebases have strong cross-service reuse patterns. Before assuming "new", verify each of these:
+The project codebase has strong cross-service reuse patterns. Before assuming "new", verify each of these:
 
-- [ ] **HTTP clients to downstream services.** If the change involves a downstream service, grep `@FeignClient` / `WebClient` / `RestTemplate` / similar annotations under `**/client/**` and sibling folders — a client may already exist with the method you need or close to it.
-- [ ] **Message queue producers/consumers.** If the change emits or reads an event, grep `@KafkaListener`, `KafkaTemplate`, `@RabbitListener`, or the equivalent for your queue, plus topic/queue name constants. A channel often already exists.
-- [ ] **Cache / Redis keys.** If the change reads/writes a cache (session, data cache, pub/sub), grep for the key prefix. Two services accidentally using the same prefix for different payloads is a classic legacy-codebase bug.
-- [ ] **SSE / WebSocket / STOMP channels.** If the change pushes real-time messages, look for existing realtime services in the repo for existing channels — prefer adding to an existing channel over creating a new one.
+- [ ] **Feign clients.** If the change involves a downstream service (content-service, admin-service, viewer, sse, ai-engine), grep `@FeignClient` annotations in `example-api/**/client/**` and similar — a client may already exist with the method you need or close to it.
+- [ ] **Kafka producers/consumers.** If the change emits or reads an event, grep `@KafkaListener`, `KafkaTemplate`, and topic name constants. A topic often already exists.
+- [ ] **Redis keys / caches.** If the change reads/writes Redis (session, cache, pub/sub), grep for the key prefix. Two services accidentally using the same prefix for different payloads is a classic Project bug.
+- [ ] **SSE / STOMP channels.** If the change pushes real-time messages, look at `sse-api` and `frontend-websocket-api` for existing channels.
 - [ ] **SSO / JWT handling.** Never roll your own. Use existing filter/interceptor chains; grep `JwtFilter`, `SsoInterceptor`, `TokenValidator`, etc.
-- [ ] **Encrypted properties.** If config must be added, check how siblings in the same service encrypt values (Jasypt `ENC(...)`, Vault references, SOPS, or project-specific scheme). Never commit a plaintext credential.
-- [ ] **ORM mappers / repositories.** If a new query is needed, first look at the same-domain mapper/repository file. An existing `SELECT` may already return a superset you can filter in the service layer, avoiding a new query.
+- [ ] **Jasypt-encrypted properties.** If config must be added, check how siblings in the same service encrypt values (`ENC(...)` pattern). Never commit a plaintext credential.
+- [ ] **MyBatis mappers.** If a new query is needed, first look at the same-domain mapper XML file. An existing `SELECT` may already return a superset you can filter in the service layer, avoiding a new query.
 
 Each of these checks takes 30 seconds with `grep` and prevents a 2-hour incident.
 
@@ -77,7 +77,7 @@ Each of these checks takes 30 seconds with `grep` and prevents a 2-hour incident
 
 Flag any of these and **stop** to redesign before coding:
 
-- New code reaches across module boundaries that existing code does not cross (e.g., service A directly reading from service B's DB — it should go through service B's API).
+- New code reaches across module boundaries that existing code does not cross (e.g., service-api directly reading from content-api's DB — it should go through content-service).
 - Proposed service method now takes 5+ unrelated parameters after the re-check. Split or wrap in a request object.
 - New DTO bundles fields from multiple unrelated concerns. Split per concern.
 - The change creates a new two-way dependency between modules that previously had a one-way dependency.

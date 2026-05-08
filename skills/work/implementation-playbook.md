@@ -1,8 +1,6 @@
 # Implementation Playbook (Phase 2 Stack-Specific Guardrails)
 
-Quick-reference for `/work`'s TDD implementation phase. Read the section matching the stack you are editing. Deviations require explicit justification in `work.md`.
-
-> **Fork this file.** The examples below are for a Spring Boot + MyBatis backend and a Vue 3 + Vite frontend. If your stack differs (NestJS, FastAPI, Django, Go, Rails, etc.), copy this file to your fork and replace the sections with your framework's equivalents. The **rules** generalize; the **code snippets** do not.
+This is the quick-reference for `/work`'s TDD implementation phase, tuned to common backend/fullstack stacks. Read the section matching the service family you are editing. Deviations require explicit justification in `work.md`.
 
 ## Symbol Legend (same as explore.md / work.md)
 
@@ -14,30 +12,30 @@ Quick-reference for `/work`'s TDD implementation phase. Read the section matchin
 
 ---
 
-## 1. Spring Boot + MyBatis Backend (reference stack)
+## 1. Spring Boot + MyBatis Backend (`example-*-api`)
 
-Applies to any Spring Boot service that uses MyBatis as its data layer. Names like `user-service`, `order-api`, etc. are your own.
+Affected services: `example-api`, `content-api`, `admin-api`, `example-viewer-api`.
 
 ### Layer discipline
 
 ```
 Controller  → parses HTTP, validates shape, returns response envelope
    ↓
-Service     → owns business logic, transaction boundaries, outbound calls
+Service     → owns business logic, transaction boundaries, Feign calls
    ↓
 Mapper/Repo → owns SQL, no conditionals beyond dynamic SQL
    ↓
-Database / Cache / Message Queue
+MySQL / Redis / Kafka
 ```
 
 - Do not push business logic into controllers "because it's shorter". Controllers are thin.
 - Do not write SQL in services. New query → new mapper method + mapper XML entry.
 - DTOs never carry JPA entities across the controller boundary. Convert at the service layer.
 
-### Transaction annotations (critical)
+### Transaction annotations (critical for Spring/JPA/routing setups)
 
-- **Read paths** (GET endpoints, query-only service methods): `@Transactional(readOnly = true)` — enables read-replica routing where configured. Missing `readOnly = true` on a read path means hitting the primary DB unnecessarily.
-- **Write paths** (POST/PUT/PATCH/DELETE): `@Transactional` without `readOnly` — goes to primary.
+- **Read paths** (GET endpoints, query-only service methods): `@Transactional(readOnly = true)` — this enables read-replica routing when the stack supports it. Missing `readOnly = true` on a read path means hitting the primary DB unnecessarily.
+- **Write paths** (POST/PUT/PATCH/DELETE): `@Transactional` without `readOnly` — goes to Master.
 - Never leave the annotation off a service-layer public method that touches the DB. Not annotating breaks the transaction boundary contract.
 - If a read path must also write (e.g., audit log), split: keep the read in `@Transactional(readOnly = true)` and publish an event for the write side.
 
@@ -46,37 +44,37 @@ Database / Cache / Message Queue
 - New query: add a method signature to the Mapper interface, add a `<select>` / `<insert>` / `<update>` / `<delete>` block with the **same id** to the XML, add parameter/result types. No inline SQL in services.
 - Reuse existing `resultMap` definitions when the row shape matches. Do not define a parallel resultMap for the same table columns.
 - Bind parameters with `#{param}`, never `${param}`, except for whitelisted dynamic identifiers (column names from a fixed set). Anything else is SQL injection.
-- `LIMIT`/`OFFSET` pagination: match the existing pagination helper pattern — grep for `pageNum`, `pageSize`, `PagingDto` or similar in the target service.
+- `LIMIT`/`OFFSET` pagination: match the existing pagination helper pattern — grep for `pageNum`, `pageSize`, `PagingDto` in the target service.
 
-### HTTP clients to downstream services (Feign / WebClient / RestTemplate)
+### Feign clients (service → downstream)
 
-- Reuse an existing `@FeignClient` / WebClient bean if it targets the same downstream service. Add a new method to that client; do not create a second client to the same service.
-- Method signatures on cross-service clients are a contract. Adding a required field or changing a path requires matching changes in the downstream service within the same PR (or a backwards-compatible overload).
+- Reuse an existing `@FeignClient` if it targets the same downstream service. Add a new method to that client; do not create a second client to the same service.
+- Method signatures on Feign clients are a cross-service contract. Adding a required field or changing a path requires matching changes in the downstream service within the same PR (or a backwards-compatible overload).
 - Timeouts, retries, and fallbacks are configured at the client level. Do not reimplement retry logic inside a new method.
 
-### Message queue (Kafka / RabbitMQ / SQS / etc.)
+### Kafka
 
-- Events flow producer ⇢ consumers. Reuse an existing topic/queue if the payload semantics match.
-- Payload DTOs for message queues are a wire contract. Adding a field = add as nullable with a default; removing or renaming = versioned topic or versioned payload.
-- `@KafkaListener` (or equivalent) methods must be idempotent. If the plan did not call this out in §5B, flag it in Open Questions.
+- Events flow producer service ⇢ consumers. Reuse an existing topic if the payload semantics match.
+- Payload DTOs for Kafka are a wire contract. Adding a field = add as nullable with a default; removing or renaming = versioned topic or versioned payload.
+- `@KafkaListener` methods must be idempotent. If the plan did not call this out in §5B, flag it in Open Questions.
 
-### Encrypted properties (Jasypt / Vault / SOPS / KMS)
+### Jasypt properties
 
-- Any secret added to `application*.yml` must be encrypted by whatever scheme the project already uses. Do not commit plaintext.
-- Search existing `application-dev.yml` / `application-prod.yml` for the existing pattern (`ENC(...)` for Jasypt, `vault:` for Vault, etc.) and follow it.
+- Any secret added to `application*.yml` must be encrypted with the project's Jasypt master key. Do not commit plaintext.
+- Search the service's existing `application-dev.yml` / `application-prod.yml` for the `ENC(...)` pattern; follow it.
 
 ### Test scaffolding (TDD Phase 2)
 
-- Unit tests for services: use Mockito for mapper / HTTP-client dependencies. Do **not** spin up Spring context for a pure service unit.
-- Integration tests for mappers: use the MyBatis test slice (`@MybatisTest` or the project's existing test base class — grep for one). Real DB (H2, Testcontainers Postgres/MySQL — follow whatever the service already uses).
-- Do not add `@SpringBootTest` where a slice test suffices; it slows the suite and masks coupling issues.
+- Unit tests for services: use Mockito for mapper/Feign dependencies. Do **not** spin up Spring context for a pure service unit.
+- Integration tests for mappers: use the MyBatis test slice (`@MybatisTest` or the project's existing test base class — grep for one). Real DB (H2 or Testcontainers MySQL — follow whatever the service already uses).
+- Do not add @SpringBootTest where a slice test suffices; it slows the suite and masks coupling issues.
 - Test file naming: mirror source — `SomeService` → `SomeServiceTest`, same package.
 
 ### Running tests (per service)
 
 ```bash
 # Full test suite
-./gradlew test
+cd <service>-api && ./gradlew test
 
 # Focused
 ./gradlew test --tests 'com.example.<pkg>.<Class>'
@@ -87,21 +85,23 @@ Database / Cache / Message Queue
 
 ---
 
-## 2. Middleware / BFF Layer (proxy services with added logic)
+## 2. WAS Middleware (`admin-was`, `content-was`, `demo-was`)
 
-When a service sits in front of another service and adds business logic on top (backend-for-frontend, gateway, orchestrator):
+Affected services: `admin-was`, `content-was`, `demo-was`.
 
-- Do **not** duplicate a business rule that already exists downstream. If the rule is needed here too, call downstream via the shared client, or move the rule to a shared module, per the plan.
-- Request/response shapes between the layer and its downstream are an internal contract — keep them in sync. If a field is added on one side, the other side either ignores it safely or is updated in the same PR.
-- Error handling at this layer should unwrap and re-wrap downstream errors into the user-facing response envelope. Do not leak raw downstream stack traces to the browser.
+These are proxy layers in front of the corresponding `-api` service, with their own business logic added on top.
 
-Everything in Section 1 (layer discipline, transactions if the layer touches its own DB, MyBatis/JPA conventions, secret handling) applies.
+- Do **not** duplicate a business rule that already exists in the `-api`. If the rule is needed here too, call the `-api` via Feign or move the rule to a shared module, per the plan.
+- Request/response shapes between WAS and API are an internal contract — keep them in sync. If a field is added on one side, the other side either ignores it safely or is updated in the same PR.
+- Error handling at the WAS layer should unwrap and re-wrap `-api` errors into the user-facing response envelope. Do not leak raw `-api` stack traces to the browser.
+
+Everything in Section 1 (layer discipline, transactions if the WAS touches its own DB, MyBatis conventions, Jasypt) applies.
 
 ---
 
-## 3. Vue 3 + Vite Frontend (reference stack)
+## 3. Vue 3 + Vite Frontend (`example-*-web`, `chat-widget`)
 
-Applies to any Vue 3 + Vite SPA. React/Svelte/Angular equivalents follow the same layer rules — only the idioms differ.
+Affected services: `frontend-web`, `admin-web`, `content-web`, `viewer-web`, `chat-widget`.
 
 ### Layer discipline
 
@@ -119,15 +119,15 @@ Backend
 - Composables return `{ state, actions }`; components bind them. Don't put business logic in components.
 - Pinia stores: one store per domain, not per component. Grep existing stores before creating a new one.
 
-### Vite proxy (common gotcha)
+### Vite proxy (common proxy gotcha)
 
 - Frontend calls are proxied per `vite.config.js`. Before adding a new endpoint, open the target service's `vite.config.js` and confirm the path prefix is routed.
-- If a new prefix is needed, the change belongs in `vite.config.js` **and** in the deployed nginx/Helm/Ingress config — which is a deploy-time change, not a build-time one. Flag this in the report if missed.
+- If a new prefix is needed, the change belongs in `vite.config.js` **and** in the deployed nginx/Helm config — which is a deploy-time change, not a build-time one. Flag this in the report if missed.
 
 ### Type safety
 
-- TypeScript-first projects: types go in `src/types/` or colocated `*.types.ts`. Do **not** use `any` to silence the compiler.
-- JavaScript projects: use JSDoc `@typedef` on shared shapes. Lint must pass.
+- TypeScript-first services (`frontend-web`, `viewer-web`): types go in `src/types/` or colocated `*.types.ts`. Do **not** use `any` to silence the compiler.
+- JavaScript services (`admin-web`): use JSDoc `@typedef` on shared shapes. Lint must pass.
 
 ### Tests (TDD Phase 2 for frontend)
 
@@ -138,6 +138,7 @@ Backend
 ### Running (per service)
 
 ```bash
+cd <service>-web
 npm run dev         # dev server
 npm run lint        # eslint
 npm run type-check  # tsc --noEmit or vue-tsc
@@ -155,7 +156,7 @@ Type-check and lint MUST both be clean before Phase 4.
 - **No `System.out.println`, `console.log`, `println`, `printStackTrace`.** Use the project's logger (SLF4J in Java, the existing logger util in the frontend if present — grep for it).
 - **Structured logging.** Java: `log.info("event_name", kv("userId", id), kv("reason", reason));` (match whatever the service already does). Frontend: the existing logger, not raw `console.log`.
 - **No hardcoded URLs, ports, tenant IDs.** Use `application-<profile>.yml` for backend, `import.meta.env` or the proxy table for frontend.
-- **Ports belong in config, not source.** Never hardcode a port in a new config file without a compelling reason — match whatever the existing services use.
+- **Ports come from project config.** Derive them from profile files, compose files, service docs, or repo instructions. Never hardcode a port in a new config file without a compelling reason.
 - **`@Transactional(readOnly = true)`** on reads — say it once more, because it's the most common regression.
 
 ---

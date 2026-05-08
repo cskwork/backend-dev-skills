@@ -2,13 +2,15 @@
 
 ## TL;DR
 
-Final gate before a change ships. Runs real `curl` against a live service (localhost by default; remote envs allowed via an explicit, recorded consent gate), captures every request/response verbatim, and refuses to claim "production-ready" without recorded evidence. On failure, hands `/work` a *specific delta* — not "fix it" — and caps the re-work loop at 3 iterations before escalating.
+Final gate before a change ships. First presents a verification plan for approval, then uses verifier subagents to run real `curl` against a live target service, captures every request/response verbatim, and refuses to claim "production-ready" without recorded evidence. On failure, hands `/work` a *specific delta* — not "fix it" — and caps the re-work loop at 3 iterations before escalating.
 
 Outputs:
 - `.backend/<YYYYMM>/<slug>/verify.md` — dense symbolic report with status `pass | fail-escalated | fail-user-required`
 - `.backend/<YYYYMM>/<slug>/harness/*.sh` — reusable curl scripts per endpoint
 - `.backend/<YYYYMM>/<slug>/fixtures/*.json` — per-variant payloads, PII redacted
 - `.backend/<YYYYMM>/<slug>/runs/run-<N>.log` — raw `curl -i` output per iteration
+
+User-facing responses and verification plans are Korean-first for Korean users. Code identifiers, paths, commands, SQL, endpoints, and exact error strings stay unchanged.
 
 ## What's in this directory
 
@@ -24,12 +26,13 @@ Outputs:
 
 ```
 Phase 0 — Load Contract      Derive endpoint target list from work.md §4 / explore.md §7.
-Phase 1 — Payload Sourcing   user-provided → saved fixtures → live DB sample → synthesized.
-Phase 2 — Harness Generation curl + jq + assertions. Auth token cached in _env.sh.
-Phase 3 — Execution          Fire curl. Capture every request/response pair verbatim.
+         Plan Checkpoint    Tell user targets/env/payloads/assertions/subagents; wait.
+Phase 1 — Payload Sourcing   Verifier subagents: user → saved → DB sample → synthesized.
+Phase 2 — Harness Generation Verifier subagents: curl + jq + assertions.
+Phase 3 — Execution          Verifier subagents: fire curl and capture raw output.
 Phase 4 — Triage             PASS | FAIL-APP | FAIL-CONTRACT | FAIL-ENV | PASS-WITH-NOTES
 Phase 5 — Iteration (bounded) Hand /work a SPECIFIC delta. Cap: 3 re-invocations.
-Phase 6 — Wrap Up            verify.md + runs/ + harness/ + fixtures/ persisted.
+Phase 6 — Wrap Up            verify.md + plan + verifier work log + artifacts persisted.
 ```
 
 ## What makes this different from "just run the tests"
@@ -48,8 +51,10 @@ Key disciplines enforced:
 
 - **Real payload shapes** — fixtures come from real DB rows (redacted) or user-provided cases, not invented JSON
 - **Three variants minimum** — `happy` + `boundary` + `negative` per endpoint (plus `regression` for bug fixes)
+- **Plan before live calls** — endpoint/env/payload/assertion/subagent plan is shown to the user before execution
+- **Verifier subagents** — actual payload sourcing, harness generation, and curl execution are assigned to bounded verifier subagents
 - **Never paraphrase results** — the results matrix is copied verbatim into `verify.md`
-- **Localhost-default blast radius** — `BASE_URL` defaults to localhost. Remote envs (dev/stg/audit/prod) are *opt-in*: the user must request them explicitly, the consent is recorded in `verify.md §0`, and `VERIFY_REMOTE_ACK`/`VERIFY_PROD_ACK` flags must be set per the policy table in `SKILL.md`. Remote-env tokens never touch disk.
+- **Environment-bounded blast radius** — local/dev by default; audit/stg only with explicit user instruction; prod never
 - **Bounded re-work** — 3-iteration cap prevents unproductive `/work` loops; failure after cap escalates to the user or `/explore`
 
 ## Iteration protocol
@@ -106,7 +111,7 @@ Or standalone:
 /verify POST /api/v1/bookmarks with this payload: { "chapterId": "...", ... }
 ```
 
-Time budget: 5–10 min for the first run. Re-runs are near-instant since harness/fixtures are cached per ticket.
+First response should be the verification plan, not a completed run. After approval, time budget is typically 5–10 min for the first run. Re-runs are near-instant since harness/fixtures are cached per ticket.
 
 ## When to use
 
@@ -122,7 +127,7 @@ Time budget: 5–10 min for the first run. Re-runs are near-instant since harnes
 
 ## Dependencies
 
-**None.** This skill is fully self-contained — the fresh-output rule, the bounded iteration loop, and the parallel-endpoint dispatch technique are all inlined in `SKILL.md`. Install the folder and it works.
+**Runtime subagent support is required for normal `/verify` execution.** If subagents cannot start, the skill stops and asks the user whether to waive that requirement. The plan gate, fresh-output rule, bounded iteration loop, and verifier-subagent dispatch are all inlined in `SKILL.md`.
 
 **Optional companion skills** (if you also use the superpowers skill pack or similar): `verification-before-completion`, `systematic-debugging`, `dispatching-parallel-agents` — these overlap with the inline procedures and can be used if preferred. They are not required.
 
@@ -133,4 +138,4 @@ Time budget: 5–10 min for the first run. Re-runs are near-instant since harnes
 
 ## The one-sentence summary
 
-> **Until verify.md says `status: pass`, the change is not production-ready — regardless of how green the unit tests are.**
+> **Plan first, verify through bounded subagents, and do not call it production-ready until verify.md says `status: pass`.**

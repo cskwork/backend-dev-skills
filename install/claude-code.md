@@ -9,15 +9,16 @@ Claude Code has native support for "skills" as markdown files with frontmatter. 
 git clone https://github.com/cskwork/backend-dev-skills.git
 cd backend-dev-skills
 
-# Copy all four skills into your Claude Code skills directory
+# Copy all five skills into your Claude Code skills directory
 mkdir -p ~/.claude/skills
+cp -r skills/reproduce  ~/.claude/skills/
 cp -r skills/explore     ~/.claude/skills/
 cp -r skills/work        ~/.claude/skills/
 cp -r skills/verify      ~/.claude/skills/
 cp -r skills/qa-engineer ~/.claude/skills/
 ```
 
-That's the entire install for `/explore`, `/work`, `/verify`. No settings.json edits, no plugins, no restart required.
+That's the entire install for `/reproduce`, `/explore`, `/work`, and `/verify`. No settings.json edits, no plugins, no restart required.
 
 **For `/qa-engineer` only**, install Playwright once per machine (or per repo if you prefer local installs):
 
@@ -50,7 +51,7 @@ If you want all sessions on your machine (or across your team) to see the pipeli
 ```json
 {
   "companyAnnouncements": [
-    "[Backend Pipeline] Default flow for any legacy/multi-service backend task (feature or bug)\n[Backend Pipeline] 1. /explore     -> evidence-based plan @ .backend/<YYYYMM>/<slug>/explore.md  (NO CODE until approved)\n[Backend Pipeline] 2. /work        -> TDD implementation + paired work.md + docs/features|bugs entry\n[Backend Pipeline] 3. /verify      -> curl E2E gate (localhost) + verify.md (status: pass | fail-escalated | fail-user-required)\n[Backend Pipeline] 4. [deploy]     -> ship to dev/stg/audit/prod\n[Backend Pipeline] 5. /qa-engineer -> browser E2E gate (deployed URL) + repeatable Playwright suite under e2e/specs/ + qa.md"
+    "[Backend Pipeline] Default flow for any legacy/multi-service backend task (feature or bug)\n[Backend Pipeline] 0. /reproduce  -> browser as-is proof @ .backend/<YYYYMM>/<slug>/reproduce.md (UI-visible bugs)\n[Backend Pipeline] 1. /explore     -> evidence-based plan @ .backend/<YYYYMM>/<slug>/explore.md  (NO CODE until approved)\n[Backend Pipeline] 2. /work        -> TDD implementation + paired work.md + docs/features|bugs entry\n[Backend Pipeline] 3. /verify      -> curl E2E gate (localhost) + verify.md (status: pass | fail-escalated | fail-user-required)\n[Backend Pipeline] 4. [deploy]     -> ship to dev/stg/audit/prod\n[Backend Pipeline] 5. /qa-engineer -> browser E2E gate (deployed URL) + repeatable Playwright suite under e2e/specs/ + qa.md"
   ]
 }
 ```
@@ -107,7 +108,7 @@ For a shared team install, check this repo into your monorepo under any path, an
 ## Uninstall
 
 ```bash
-rm -rf ~/.claude/skills/explore ~/.claude/skills/work ~/.claude/skills/verify ~/.claude/skills/qa-engineer
+rm -rf ~/.claude/skills/reproduce ~/.claude/skills/explore ~/.claude/skills/work ~/.claude/skills/verify ~/.claude/skills/qa-engineer
 ```
 
 And remove the `companyAnnouncements` entry from `settings.json` if you added one.

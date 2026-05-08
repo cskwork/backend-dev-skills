@@ -13,12 +13,16 @@ git clone https://github.com/cskwork/backend-dev-skills.git ~/backend-dev-skills
 ```markdown
 # Backend Development Skills
 
-This project uses four skills for non-trivial backend/fullstack work. When the
-user asks for a feature, bug fix, verification, or post-deploy QA, load the
+This project uses five skills for non-trivial backend/fullstack work. When the
+user asks for browser reproduction, a feature, bug fix, verification, or post-deploy QA, load the
 corresponding skill from `~/backend-dev-skills/skills/<name>/SKILL.md` and
 follow it phase-by-phase.
 
 ## Skills
+
+- **reproduce** — browser as-is proof before coding. 5 phases.
+  Path: `~/backend-dev-skills/skills/reproduce/SKILL.md`
+  Output: `.backend/<YYYYMM>/<slug>/reproduce.md` + screenshots/network/Playwright artifacts
 
 - **explore** — evidence-based plan before any code. 5 phases.
   Path: `~/backend-dev-skills/skills/explore/SKILL.md`
@@ -37,13 +41,14 @@ follow it phase-by-phase.
   Output: `qa.md` + `e2e/specs/*.spec.ts` (repeatable Playwright suite, updated in-place)
   Prereq: `@playwright/test` + `playwright-cli` installed (`npm i -g @playwright/test @playwright/cli && npx playwright install`)
 
-## Iron Laws (all four skills)
+## Iron Laws (all five skills)
 
-1. No code changes until `/explore` has produced an approved `explore.md`.
-2. No "done" claim until fresh verification output is in hand.
-3. No "production-ready" claim until `/verify` says `status: pass`.
-4. No "live for users" claim until `/qa-engineer` says `status: pass` with trace+video recorded against the deployed URL.
-5. `/verify` refuses non-localhost `BASE_URL`; `/qa-engineer` refuses localhost. They are complementary gates.
+1. No code fix before `/reproduce` records as-is browser evidence when the issue is UI-visible.
+2. No code changes until `/explore` has produced an approved `explore.md`.
+3. No "done" claim until fresh verification output is in hand.
+4. No "production-ready" claim until `/verify` says `status: pass`.
+5. No "live for users" claim until `/qa-engineer` says `status: pass` with trace+video recorded against the deployed URL.
+6. `/verify` refuses non-localhost `BASE_URL`; `/qa-engineer` refuses localhost. They are complementary gates.
 
 ## How to invoke
 

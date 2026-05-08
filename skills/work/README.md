@@ -2,12 +2,16 @@
 
 ## TL;DR
 
-Consumes the exploration report from `/explore` as a **contract** and implements it with TDD discipline, surgical diffs, and paired documentation. Refuses to improvise scope.
+Consumes the exploration report from `/explore` as a **contract** and implements it with subagent-driven TDD discipline, surgical diffs, and paired documentation. Refuses to improvise scope.
 
 Outputs (all three required):
 - Code changes in the services the report named
 - `.backend/<YYYYMM>/<slug>/work.md` — AI-optimized paired log
 - `docs/features/<YYYY-MM-DD>-<slug>.md` **or** `docs/bugs/<YYYY-MM-DD>-<slug>.md` — human-prose stakeholder note
+
+Subagents are required for implementation after the contract is loaded. The main agent validates the contract, assigns bounded work units, reviews the handoffs, writes the `.md` artifacts, and explains what each agent did.
+
+User-facing responses are Korean-first for Korean users. Code identifiers, paths, commands, SQL, endpoints, and exact error strings stay unchanged.
 
 ## What's in this directory
 
@@ -23,10 +27,10 @@ Outputs (all three required):
 ```
 Phase 0 — Load Contract       Read explore.md fully. Restate it. Validate it's workable.
 Phase 1 — Reuse Re-check      Re-grep §6/§7 decisions against current code. Fix drift.
-Phase 2 — TDD Implementation  Red → Green → Verify → Refactor per change unit.
+Phase 2 — TDD Implementation  Subagents run Red → Green → Verify → Refactor per unit.
 Phase 3 — Surgical Review     git diff: every line must trace to §7. Revert drive-bys.
 Phase 4 — Verification        Fresh output only — tests/lint/build/regression cycle.
-Phase 5 — Wrap Up             Paired docs: work.md + docs/features|bugs/<date>-<slug>.md.
+Phase 5 — Wrap Up             Paired docs + agent work log + final agent summary.
 ```
 
 ## What makes this different from "just ask the AI to implement"
@@ -44,6 +48,7 @@ This skill refuses each of those:
 - **Red-green regression cycle (bug fixes only)** — the regression test must fail without the fix and pass with it. Proven both ways.
 - **Fresh output only** — "the build passes" is not a claim; pasted output from the last 30 seconds is.
 - **Paired documentation** — the skill does not exit without `work.md` AND the human-facing docs entry.
+- **Agent traceability** — `work.md` and the final response must say what the main agent did and what each subagent did.
 
 ## Stack-specific adaptation
 
@@ -64,10 +69,11 @@ The core 6-phase structure and iron laws are stack-independent.
 
 Agent responds by:
 1. Reading `explore.md` in full; announcing kind + scope
-2. Creating a task list mirroring §7 Proposed Changes
+2. Creating a task list mirroring §7 Proposed Changes, then assigning subagents with disjoint ownership
 3. Re-validating reuse decisions
-4. Implementing one change unit at a time with TDD
-5. Diff review → verification → paired wrap-up
+4. Having subagents implement one change unit at a time with TDD
+5. Reviewing subagent handoffs → verification → paired wrap-up
+6. Responding with artifact paths and a clear explanation of what each agent did
 
 Time budget: 30 min – 2 hr depending on scope. The skill will stop and ask if any assumption breaks.
 
@@ -84,7 +90,7 @@ Time budget: 30 min – 2 hr depending on scope. The skill will stop and ask if 
 
 ## Dependencies
 
-**None.** This skill is fully self-contained — the Red → Green → Verify → Refactor loop, the fresh-output verification rule, and the surgical-diff discipline are all inlined in `SKILL.md`. Install the folder and it works.
+**Runtime subagent support is required for normal `/work`.** If the runtime cannot start subagents, the skill stops and asks the user whether to waive that requirement. The Red → Green → Verify → Refactor loop, fresh-output verification rule, and surgical-diff discipline are inlined in `SKILL.md`.
 
 **Optional companion skills** (if you also use the superpowers skill pack or similar): `test-driven-development`, `verification-before-completion`, `systematic-debugging` — these overlap with the inline procedures and can be used if preferred. They are not required.
 
@@ -95,4 +101,4 @@ Time budget: 30 min – 2 hr depending on scope. The skill will stop and ask if 
 
 ## The one-sentence summary
 
-> **Ship exactly what the contract specified — cleanly, reusing what exists, with proof it works.**
+> **Ship exactly what the contract specified through bounded subagents, then leave proof and a clear agent-by-agent explanation.**

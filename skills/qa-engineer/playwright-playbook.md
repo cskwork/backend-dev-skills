@@ -1,6 +1,6 @@
-# Playwright Playbook
+# Playwright Playbook (Project-tuned)
 
-> Phase-2 companion to `SKILL.md`. Upstream reference: Microsoft's `playwright-cli` skill at https://github.com/microsoft/playwright-cli/tree/main/skills/playwright-cli — this playbook assumes that skill is loaded or its SKILL.md has been read. This file covers **the generic cli → spec translation pattern**, auth bootstrap templates, and realtime (SSE/WebSocket) assertions. Fork it and add your app's specific routes, auth flow, and selectors.
+> Phase-2 companion to `SKILL.md`. Upstream reference: Microsoft's `playwright-cli` skill at https://github.com/microsoft/playwright-cli/tree/main/skills/playwright-cli — this playbook assumes that skill is loaded or its SKILL.md has been read. This file only covers **project-specific usage patterns** — login flows, SSE/WebSocket assertions, the cli→spec translation pattern, and frontend-service-specific conventions.
 
 ## Two-Tool Split
 
@@ -15,8 +15,7 @@
 
 Walk the flow once with cli, transcribing every command into `e2e/scripts/<flow>.sh`. Then translate to spec.
 
-**cli probe** (in `scripts/login.sh`):
-
+**cli probe** (in `scripts/login-sso.sh`):
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
@@ -31,78 +30,73 @@ playwright-cli -s=qa-login --raw snapshot > ../artifacts/login-after.yml
 playwright-cli -s=qa-login close
 ```
 
-**Translated spec** (in `specs/login.spec.ts`):
-
+**Translated spec** (in `specs/login-sso.spec.ts`):
 ```typescript
 import { test, expect } from '@playwright/test';
 
-test.describe('login', () => {
-  test('happy — valid credentials land on dashboard', async ({ page }) => {
+test.describe('login-sso', () => {
+  test('happy — SSO login lands on dashboard', async ({ page }) => {
     await page.goto('/login');
     await page.getByLabel('Email').fill(process.env.QA_TEST_USER_ID!);
     await page.getByLabel('Password').fill(process.env.QA_TEST_PASSWORD!);
     await page.getByRole('button', { name: 'Sign in' }).click();
 
     await expect(page).toHaveURL(/\/dashboard/);
-    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'class dashboard' })).toBeVisible();
   });
 
-  test('negative — wrong password shows error', async ({ page }) => {
+  test('negative — wrong password shows error toast', async ({ page }) => {
     await page.goto('/login');
     await page.getByLabel('Email').fill(process.env.QA_TEST_USER_ID!);
     await page.getByLabel('Password').fill('wrong-password-123!');
     await page.getByRole('button', { name: 'Sign in' }).click();
 
-    await expect(page.getByRole('alert')).toContainText(/invalid|incorrect/i);
+    await expect(page.getByRole('alert')).toContainText('Invalid email or password');
     await expect(page).toHaveURL(/\/login/);
   });
 });
 ```
 
 Key differences on translation:
-
 - `eN` numeric refs → **semantic locators** (`getByRole`, `getByLabel`, `getByTestId`). Numeric refs change per snapshot; semantic locators survive UI churn.
 - Inline passwords → `process.env` references loaded from `_env.sh`.
 - Final `snapshot > after.yml` → `expect(page).toHaveURL(...)` + `toBeVisible()` assertions.
 - Error paths get their own `test()` block, not a branch inside the happy path.
 
-## Login Flows — Pick What Matches Your App
+## Project Login Flows
 
-Replace the examples below with your app's actual flow. Three common patterns:
+Project has three authentication modes. Pick the right one per env.
 
-### Pattern A — Dev env: test JWT injection (fastest, recommended for dev)
+### Dev env — test JWT injection (fastest, recommended)
 
-If your backend has a dev-profile-only "test token" endpoint (see `verify/jwt-auth-reference.md`), bypass UI login by injecting the token directly:
+Referenced in `~/.claude/skills/verify/jwt-auth-reference.md`. Bypasses SSO. Suitable for dev only.
 
 ```typescript
-// e2e/_login.ts — called from playwright.config.ts `globalSetup`
+// e2e/_login.sh callee, or a Playwright global-setup file
 import { chromium } from '@playwright/test';
 
-export default async function globalSetup() {
-  const res = await fetch(
-    `${process.env.API_BASE_URL}/test/generate-jwt?userId=${process.env.QA_TEST_USER_ID}`
-  );
-  const { token } = await res.json();
+const res = await fetch(
+  `${process.env.AUTH_API_URL}/test/generate-jwt?userId=${process.env.QA_TEST_USER_ID}&role=USER`
+);
+const { token } = await res.json();
 
-  const browser = await chromium.launch();
-  const ctx = await browser.newContext();
-  await ctx.addInitScript((t) => {
-    localStorage.setItem('accessToken', t);  // confirm key name from the web app's auth utility
-  }, token);
-  await ctx.storageState({ path: 'storageState.dev.json' });
-  await browser.close();
-}
+const browser = await chromium.launch();
+const ctx = await browser.newContext();
+await ctx.addInitScript((t) => {
+  localStorage.setItem('accessToken', t);  // confirm key name from frontend-web/src/utils/auth.ts
+}, token);
+await ctx.storageState({ path: 'storageState.dev.json' });
+await browser.close();
 ```
 
 Before committing `storageState.dev.json`:
-
 - Redact any cookie with a real session ID.
-- Keep only the `localStorage.accessToken` entry (it's already a short-lived dev token tied to a test account).
-- Add a comment in `_env.sh` noting the regeneration command.
+- Keep only the `localStorage.accessToken` entry, which is already a short-lived dev token tied to the test account.
+- Add a comment in `_env.sh` noting regeneration command.
 
-### Pattern B — Stg / audit env: interactive SSO via playwright-cli
+### Stg / audit env — interactive SSO provider via playwright-cli
 
-For SSO-gated environments, walk the login once, capture storage state, reuse. Re-run when the SSO session expires (typically 30–60 min).
+Must be walked once, the storage state captured, and reused. This must be redone when the SSO session expires (typically 30-60 min).
 
 ```bash
 #!/usr/bin/env bash
@@ -110,85 +104,103 @@ For SSO-gated environments, walk the login once, capture storage state, reuse. R
 source ./_env.sh
 
 playwright-cli -s=qa-login open "$BASE_URL"
+# Snapshot — click the SSO button
 playwright-cli -s=qa-login snapshot
 playwright-cli -s=qa-login click "getByRole('button', { name: 'Sign in with SSO' })"
-# User-driven fill — SSO is out-of-band; ask the user to complete login in the browser window
-echo "Complete the SSO login in the opened browser window, then press Enter..."
+# User-driven fill — the SSO provider is out-of-band; ask user to complete login in the window
+echo "Complete the SSO provider login in the opened browser window, then press Enter..."
 read -r
+# Capture the landed state
 playwright-cli -s=qa-login state-save "storageState.stg.json"
 playwright-cli -s=qa-login close
 ```
 
-Do NOT automate typing real SSO credentials. Treat the SSO window as a user-driven step and wait for the operator to complete it. Spec files reuse the saved `storageState.stg.json` non-interactively.
+Do NOT automate typing real SSO credentials. Treat the SSO window as a user-driven step and wait for the operator to complete it. Spec files will reuse the saved `storageState.stg.json` non-interactively.
 
-### Pattern C — Prod env: test account credentials per session
+### Prod env — test account credentials per session
 
 Same pattern as stg, but:
-
 - Credentials are provided by the user **in-session only**. They do not get written to disk except as part of `storageState.prod.json` (which itself holds a redacted/short-lived session token, not the raw password).
-- Every run against prod asks the user at Phase 0 before proceeding.
+- Every test run against prod asks the user at Phase 0 before proceeding.
 - The prod write gate in `environment-gates.md` applies.
 
 ## Snapshot-Driven Element Targeting
 
-`playwright-cli snapshot` produces YAML listing every interactable element with a numeric ref (`e1`, `e2`, ...). Use refs for the initial probe; **never** for the spec file.
+`playwright-cli snapshot` produces YAML that lists every interactable element with a numeric ref (`e1`, `e2`, ...). Use refs for the initial probe; **never** for the spec file.
 
 ```bash
 playwright-cli snapshot > current.yml
+# Inspect the YAML — find the element by role/name/testid
 grep -E 'testId:|role:|name:' current.yml | head -40
 # Use role-based locator in the spec
 ```
 
 For unlabeled custom components, add a `data-testid` attribute to the frontend code (this is a `/work` change, not a `/qa-engineer` change — escalate via Phase 5 delta) rather than falling back to CSS selectors.
 
+## Project Frontend Service Routes
+
+Quick reference — frontend services and their dev ports:
+
+| Service | Dev port (Vite) | Auth mode |
+|---|---|---|
+| `frontend-web` | 5173 (check `vite.config.js`) | SSO provider → JWT |
+| `admin-web` | 5174 | Admin login |
+| `content-web` | 5175 | Admin login |
+| `viewer-web` | 5176 | JWT passthrough |
+| `chat-widget` | library — embedded via the host app | Inherits parent |
+
+For the deployed env, use the per-env hostname from the user, not `localhost:<port>`.
+
 ## SSE / WebSocket Assertions
 
-For realtime updates pushed from the backend (Redis Pub/Sub → SSE, STOMP over WebSocket, Server-Sent Events, Phoenix Channels, etc.) use `page.waitForResponse` (SSE) or `page.waitForEvent('websocket')` (WS).
+Project uses Redis Pub/Sub → SSE (via `sse-api`) and STOMP over WebSocket (via `frontend-websocket-api`) to push updates to browsers. Spec these with `page.waitForResponse` or `page.waitForEvent('websocket')`:
 
 ### SSE
 
 ```typescript
-test('broadcast reaches subscriber browser', async ({ page }) => {
+test('assignment broadcast reaches student browser', async ({ page }) => {
+  // Arrange: open student dashboard as logged-in student
   await page.goto('/dashboard');
 
+  // Act: open EventSource and wait for the specific message
   const ssePromise = page.waitForResponse(
     resp => resp.url().includes('/sse/subscribe') && resp.status() === 200
   );
-  // Trigger broadcast via a parallel API call (test harness uses curl in a sibling step).
+  // Trigger broadcast via a parallel API call (test harness uses curl in a sibling step)
+  // ...
   await ssePromise;
 
-  // Assert the UI reflects the broadcast.
-  await expect(page.getByRole('status', { name: /new notification/i })).toBeVisible();
+  // Assert: the UI reflects the broadcast
+  await expect(page.getByRole('status', { name: 'new assignment' })).toBeVisible();
 });
 ```
 
-### WebSocket (STOMP or raw WS)
+### WebSocket (STOMP)
 
 ```typescript
-test('realtime counter increments on peer action', async ({ page, context }) => {
+test('realtime attendance update renders in dashboard', async ({ page, context }) => {
   const wsPromise = page.waitForEvent('websocket');
-  await page.goto('/room/1001/live');
+  await page.goto('/class/1001/live');
   const ws = await wsPromise;
 
   const frameReceived = new Promise<string>(resolve => {
     ws.on('framereceived', f => resolve(f.payload.toString()));
   });
 
-  // Trigger: a peer joins in a second browser context
+  // Trigger: a peer connects in a second browser context
   const peer = await context.browser()!.newContext({ storageState: 'storageState.dev.peer.json' });
   const peerPage = await peer.newPage();
-  await peerPage.goto('/room/1001/join');
+  await peerPage.goto('/class/1001/join');
 
   const frame = await frameReceived;
-  expect(frame).toContain('PEER_JOINED');
-  await expect(page.getByTestId('peer-count')).toContainText('2');
+  expect(frame).toContain('ATTENDANCE_UPDATE');
+  await expect(page.getByTestId('attendance-count')).toContainText('2');
 });
 ```
 
 ## Tracing & Video
 
 Configure once in `playwright.config.ts`:
-
 ```typescript
 export default defineConfig({
   use: {
@@ -213,7 +225,6 @@ export default defineConfig({
 ```
 
 Open a trace:
-
 ```bash
 npx playwright show-trace artifacts/run-20260421-1430-dev/trace.zip
 ```
@@ -223,8 +234,7 @@ Smoke suite always records — it is the one that runs on every deploy and becom
 ## Route Mocking (rarely needed here)
 
 `/qa-engineer` tests the deployed system. Mocking a backend call defeats the point. The only legitimate use is:
-
-- Isolating a flaky third-party dependency (e.g. an external SSO endpoint with known instability on the dev env) to reduce false negatives. Record mock usage explicitly in `qa.md §4` with the endpoint and the reason.
+- Isolating a flaky third-party dependency (e.g. a SSO endpoint with known dev-env instability) to reduce false negatives. Record mock usage explicitly in `qa.md §4` with the endpoint and the reason.
 
 If you find yourself mocking the service under test, stop — you're writing an integration test, not a deployed-env QA.
 

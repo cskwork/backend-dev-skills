@@ -17,18 +17,20 @@ git clone https://github.com/cskwork/backend-dev-skills.git ~/backend-dev-skills
 ```markdown
 # Backend Development Pipeline
 
-This project uses a 4-skill pipeline for non-trivial backend/fullstack work. When the
-user mentions "explore", "work", "verify", or "qa" (or asks for a feature / bug
-fix / post-deploy QA in a legacy / multi-service area), load and follow the
+This project uses a 5-skill pipeline for non-trivial backend/fullstack work. When the
+user mentions "reproduce", "explore", "work", "verify", or "qa" (or asks for a browser
+reproduction, feature, bug fix, HTTP proof, or post-deploy QA in a legacy / multi-service area), load and follow the
 corresponding skill from `~/backend-dev-skills/skills/<name>/SKILL.md`.
 
 Skills:
+- `reproduce`  — browser as-is proof before coding. Output: `.backend/<YYYYMM>/<slug>/reproduce.md` + screenshots/network/Playwright artifacts
 - `explore`     — evidence-based plan before any code. Output: `.backend/<YYYYMM>/<slug>/explore.md`
 - `work`        — TDD implementation against the plan. Output: `work.md` + `docs/features|bugs/<date>-<slug>.md`
 - `verify`      — live HTTP-level proof (localhost). Output: `verify.md` + `harness/` + `fixtures/` + `runs/`
 - `qa-engineer` — browser E2E against deployed env (dev/stg/prod) using playwright-cli as probe and Playwright Test as harness. Output: `qa.md` + `e2e/specs/*.spec.ts` (repeatable, updated in-place on re-invocation)
 
 Iron laws:
+- No code fix before `/reproduce` records as-is browser evidence when the issue is UI-visible
 - No code changes until `/explore` has produced an approved `explore.md`
 - No "done" claim until fresh verification output is in hand
 - No "production-ready" claim until `/verify` says `status: pass`
@@ -82,6 +84,7 @@ When asking Codex to run a phase that references a supporting file, point it exp
 
 | Skill | Phase | Supporting file |
 |---|---|---|
+| reproduce | all | none beyond `skills/reproduce/SKILL.md` |
 | explore | 1.5 (Database) | `skills/explore/database-first.md` |
 | explore | 2B (Reuse) | `skills/explore/reuse-checklist.md` |
 | explore | 4 (Report) | `skills/explore/report-template.md` |
