@@ -151,7 +151,7 @@ Complete each phase before the next. The only legal loop is Phase 4 → Phase 5 
 5. For each flow, record: frontend service, route (e.g. `/class/:id/assign`), entry action (click path from landing page), expected end-state (from `explore.md §5B.contract.resp` interpreted as UI state).
 6. Validate:
    - Every endpoint in `verify.md §5` has a UI caller in scope OR is explicitly documented as internal-only Feign. Flag any endpoint-to-UI gap in `qa.md §9 [GAP]`.
-   - Environment target — ask the user explicitly: "Run against dev, stg, audit, or prod?" Do not infer.
+   - Environment target — use the target the user specified; ask only if it remains unknown or ambiguous.
 7. **Environment safety preflight** — see `environment-gates.md`. Refuse to proceed if:
    - User-provided `BASE_URL` resolves to `localhost` / `127.0.0.1` / internal-only hostname without tunnel consent. (`/verify` handles localhost.)
    - Target env is `prod` and the user has not explicitly consented to a prod run for this invocation.
@@ -217,7 +217,7 @@ This is where `/qa-engineer` consumes Microsoft's `playwright-cli` skill. The `p
      --reporter=html,json \
      --output=artifacts/run-<YYYYMMDD-HHMM>-<env>
    ```
-2. Run the smoke suite in isolation too (separate run folder). Smoke alone should complete in under 90 seconds. If it exceeds that, flag `qa.md §9 [PERF]`.
+2. If the smoke suite changed or its independent execution is unverified, run it in isolation with a separate run folder. Smoke alone should complete in under 90 seconds; otherwise flag `qa.md §9 [PERF]`. Reuse an unchanged smoke result already captured in this run.
 3. Capture per run:
    - `artifacts/run-<YYYYMMDD-HHMM>-<env>/trace.zip` (Playwright trace, viewable via `npx playwright show-trace`).
    - `artifacts/run-<YYYYMMDD-HHMM>-<env>/video.webm` (only on failure by default; always-on for the critical-path smoke).
@@ -276,13 +276,13 @@ This delta is the input to Phase 5 and is saved verbatim into `qa.md §7`.
 
 For each fail classification:
 
-1. Present the rework delta to the user. Ask: "Re-invoke `<upstream skill>` with this delta, or stop here?"
-2. On **user accept**:
+1. State the rework delta. Proceed only if fixes are already authorized; otherwise ask before leaving verification-only scope.
+2. With **existing or new authorization**:
    - **FAIL-UI / FAIL-BACKEND** → `/work` with the delta scoped to the specific spec line and `likely-source`. `/work` may only edit the files referenced in the delta. On return, user must redeploy before re-run.
    - **FAIL-BACKEND that survives dev parity check** → `/verify` re-run on localhost to confirm parity with deployed; if `/verify` still passes, the delta is a deployment/env issue → STOP, escalate to user.
    - **FAIL-CONTRACT** → `/explore` with the delta. The contract is wrong. Do not bypass this into `/work`.
 3. On **user reject / hold** → stop. Write `qa.md` with `status: fail-user-required` and the delta as the question.
-4. After the upstream skill returns AND the user confirms redeployment, re-run **only the affected specs** (not the full suite) with a new run folder. Record both runs — the failing one and the re-verified one.
+4. After the upstream skill returns AND deployment evidence confirms the changed revision is serving, re-run **only the affected specs** (not the full suite) with a new run folder. Record both runs — the failing one and the re-verified one.
 5. **Meaningful progress** check (same rules as `/verify §Phase 5`):
    - A previously failing variant now passes.
    - The failure moved to a different, more specific classification.
@@ -328,7 +328,7 @@ After writing, print:
 - Post-deploy re-run command: `cd <ticket>/e2e && QA_ENV=<env> npx playwright test specs/smoke.spec.ts` — so the user (or CI) can re-verify this flow on every subsequent deploy.
 - A 3-5 line human summary.
 
-Then **STOP**. Do not commit, push, open a PR, or transition a Jira ticket. `/qa-engineer`, like `/work` and `/verify`, ends at the filesystem.
+The QA deliverable ends at the filesystem. Commit, push, PR, deployment, and ticket actions require separate user authorization.
 
 ## Scope Boundaries
 
@@ -343,38 +343,6 @@ Then **STOP**. Do not commit, push, open a PR, or transition a Jira ticket. `/qa
 | Redacting PII before saving fixtures or storage state | Committing any real user data to `.backend/` |
 | Read-only assertions against prod with per-step consent | Prod writes without explicit per-step user consent |
 | Running against dev / stg / audit / prod | Running against localhost — that is `/verify`'s job |
-
-## Red Flags — STOP and Restart Phase
-
-If you catch yourself thinking:
-
-- "I'll skip the trace capture; the screenshot is enough." **(Iron Law)**
-- "`BASE_URL=http://localhost:5173` is faster to test." **(wrong skill — use `/verify`)**
-- "The spec already exists for this flow but my new flow is different, I'll overwrite it." **(update-in-place rule — add a variant or a new file, do not overwrite)**
-- "Failed once, passed twice — it's fine, mark pass." **(3 attempts; mixed results means `pass-with-flake`, not `pass`)**
-- "The prod run needs to POST to confirm — I'll just do it." **(per-step user consent for any prod write)**
-- "The user gave me their real creds; I'll inline them in `_env.sh`." **(PII/secret discipline; credentials go in user's env or session-only)**
-- "`/verify` passed on localhost, so the dev deploy must be fine." **(that is exactly the gap `/qa-engineer` exists to close)**
-- "The flow is too complex for a spec; I'll just manually walk it." **(a manual walk is not repeatable; the whole point is the spec file)**
-- "This spec failed because the selector moved; I'll delete it." **(deletion requires user consent AND a `[REMOVAL]` entry)**
-- "Iteration 2 failed but let me try one more `/work` pass." **(cap is 2; past the cap, escalate)**
-- "Prior run failed for contract; I'll run `/work` instead of `/explore` to save a round-trip." **(FAIL-CONTRACT always goes to `/explore`)**
-
-**All of these mean: STOP. Return to the phase that enforces the missing discipline.**
-
-## Common Rationalizations
-
-| Excuse | Reality |
-|---|---|
-| "Playwright is heavyweight; playwright-cli alone proves it works" | cli is a probe, not a regression harness. The user wants the script re-runnable after every deploy. That requires spec files + `npx playwright test`. |
-| "Unit tests + `/verify` + manual smoke covered it" | Manual smoke is not replayable on next deploy. Most regressions are silent until the next deploy surfaces them; only a spec file catches them. |
-| "The deployed env behaves like dev; one run is enough" | LB, CDN, reverse proxy, and static bundle all differ per env. That difference is exactly the failure surface `/qa-engineer` gates. |
-| "Prod reads are identical to stg reads; I'll skip prod" | Prod session cookies, prod CORS, prod rate-limits, and prod SSO behave differently. Smoke-on-prod is cheap and catches real incidents. |
-| "This feature will be removed soon; skip the spec" | Removal is a future PR. Until then, the flow exists and needs a spec. |
-| "The spec file is ugly; let me regenerate it" | Regeneration loses accumulated corrections (waits, retry loops, boundary tweaks). Edit in place. |
-| "I'll use CSS selectors — they're simpler" | CSS selectors break on every frontend refactor. Use role / testid / label locators so specs survive UI churn. |
-| "The test took 95s; 90s is arbitrary" | Slow smoke suites get skipped. A 60s smoke is a smoke suite people actually run. |
-| "Flakes are a test-infra problem, not a QA problem" | Flake is user-visible — a user who hits the flaky state sees a broken app. Record it; do not average it away. |
 
 ## Integration with Other Skills
 
@@ -414,12 +382,3 @@ If you catch yourself thinking:
   - Cookies / session IDs in `storageState.json` → leave structurally but replace any `Authorization` token value with a regenerated short-lived test token OR `__REDACTED__` with a note on how to re-obtain.
 - `Authorization:` header values in `network.har` → replace with `Bearer __REDACTED__` after capture.
 - Never commit real user credentials, even base64-encoded, even in `.sh` files.
-
-## The Bottom Line
-
-`/verify` proves the service accepts payloads locally.
-`/qa-engineer` proves the **deployed system** — frontend + reverse proxy + CDN + real session flow + real SSE pipe — delivers the feature to a user's browser, and provides a **reusable spec suite that re-proves it on every future deploy**.
-
-Until `qa.md` says `status: pass` (or `pass-with-flake` with an explicit accepted flake list), the deploy is not user-verified — regardless of how green `/verify` is.
-
-The spec suite under `e2e/specs/` is the durable product. `qa.md` is the audit log. Together they turn "I tested it in my browser and it worked" — the most dangerous sentence in software — into a replayable artifact any operator can re-run after the next deploy.
