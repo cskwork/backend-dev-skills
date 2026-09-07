@@ -47,7 +47,7 @@ Before any file edit or browser run, state:
 2. Goal: what must be reproduced and what evidence will prove it.
 3. Affected area: URL, service/UI, account/role, data identifiers if known.
 4. Expected outcome: `reproduced`, `not-reproduced`, `blocked-env`, `blocked-data`, or `inconclusive`.
-5. Three approaches, then recommend the smallest sustainable one.
+5. The smallest suitable reproduction approach; compare alternatives only when they change a material tradeoff.
 
 Default recommendation:
 
@@ -75,7 +75,7 @@ Ask only for missing inputs that cannot be safely inferred, such as account, tar
 | stg/audit/shared test | Browser reproduction with user-approved account/session | No destructive setup; record target URL |
 | prod | Read-only browser observation only | No DB checks, no data mutation, no destructive/user-visible experiment |
 
-If target env is ambiguous, ask before running. If prod is selected, ask for explicit confirmation and keep every action read-only.
+If the target environment is ambiguous, ask before running. Production observation requires explicit user instruction and every action remains read-only; do not request the same confirmation again.
 
 ## Artifact Layout
 
@@ -133,7 +133,7 @@ Complete each phase before the next.
    - DB/API checks if needed
    - expected status criteria
 
-Then proceed if the user already requested implementation. If the plan reveals risky ambiguity, ask the shortest blocking question.
+Then proceed when the user requested reproduction. If the plan reveals risky ambiguity, ask the shortest blocking question.
 
 ### Phase 1: Load Issue and Existing Harness
 

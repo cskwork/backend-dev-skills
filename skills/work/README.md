@@ -9,7 +9,7 @@ Outputs (all three required):
 - `.backend/<YYYYMM>/<slug>/work.md` — AI-optimized paired log
 - `docs/features/<YYYY-MM-DD>-<slug>.md` **or** `docs/bugs/<YYYY-MM-DD>-<slug>.md` — human-prose stakeholder note
 
-Subagents are required for implementation after the contract is loaded. The main agent validates the contract, assigns bounded work units, reviews the handoffs, writes the `.md` artifacts, and explains what each agent did.
+After the contract is loaded, implementation can run directly or through useful bounded delegation. The main agent validates the contract, assigns bounded work units, reviews the handoffs, writes the `.md` artifacts, and explains what each agent did.
 
 User-facing responses are Korean-first for Korean users. Code identifiers, paths, commands, SQL, endpoints, and exact error strings stay unchanged.
 
@@ -90,7 +90,7 @@ Time budget: 30 min – 2 hr depending on scope. The skill will stop and ask if 
 
 ## Dependencies
 
-**Runtime subagent support is required for normal `/work`.** If the runtime cannot start subagents, the skill stops and asks the user whether to waive that requirement. The Red → Green → Verify → Refactor loop, fresh-output verification rule, and surgical-diff discipline are inlined in `SKILL.md`.
+Delegation is optional: use bounded independent tasks when useful, available, and authorized. Direct execution follows the same evidence requirements.
 
 **Optional companion skills** (if you also use the superpowers skill pack or similar): `test-driven-development`, `verification-before-completion`, `systematic-debugging` — these overlap with the inline procedures and can be used if preferred. They are not required.
 

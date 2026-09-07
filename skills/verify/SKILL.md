@@ -19,16 +19,13 @@ description: Use when code changes have been made to backend HTTP endpoints and 
 - **Escalation bounds** — unproductive `/work` loops are detected and escalated, not retried forever
 - **Environment-bounded blast radius** — local/dev is default; audit/stg payload runs are allowed only when the user explicitly names that target; prod is never allowed
 
-**Violating the letter of this process is violating the spirit.** A "verification" without recorded request/response pairs is not a verification.
-
 ## The Iron Law
 
 ```
 NO "PRODUCTION READY" CLAIM UNTIL EVERY ASSERTION PASSES AGAINST A LIVE TARGET SERVICE
-NO LIVE VERIFICATION UNTIL A VERIFICATION PLAN IS PRESENTED TO THE USER AND APPROVED
+NO LIVE VERIFICATION OUTSIDE THE USER-AUTHORIZED TARGET AND DATA SCOPE
 NO API VERIFICATION WITHOUT A GENERATED CURL HARNESS, RECORDED `curl -i` OUTPUT, AND SAVED REQUEST FIXTURES
 NO REACHABLE HTTP ENDPOINT MAY BE VERIFIED BY UNIT TESTS, BYTECODE, MAPPER SQL, OR CODE READING INSTEAD OF CURL
-NO ACTUAL VERIFICATION WITHOUT TASK-BOUNDED VERIFIER SUBAGENTS AFTER PLAN APPROVAL
 NO PAYLOAD RUN AGAINST prod FROM THIS SKILL
 AUDIT/STG PAYLOAD RUNS REQUIRE EXPLICIT USER INSTRUCTION AND RECORDED TARGET ENVIRONMENT
 NO SKILL EXIT UNTIL verify.md IS WRITTEN AND ITS STATUS IS  pass | fail-escalated | fail-user-required
@@ -60,7 +57,7 @@ Skip only for:
 
 If there is no `<artifact-root>/.backend/<YYYYMM>/<slug>/` folder and the user wants ad-hoc API verification:
 
-1. Ask the user for: endpoint (method + path), target service, at least one sample payload (or explicit permission to pull one from DB).
+1. Identify endpoint (method + path), target service, and sample payload from the request or existing fixtures; ask only for missing inputs or data-access authorization.
 2. Derive a slug from the endpoint (e.g. `verify-post-users-login`) and today's `<YYYYMM>`.
 3. Choose the artifact root:
    - If the endpoint belongs to a single microservice/module, use that service directory. Example: `example-viewer-api/.backend/<YYYYMM>/<slug>/`.
@@ -119,9 +116,9 @@ See `verify-template.md` for the exact `verify.md` format and `curl-harness.md` 
 **Language:** Match the user's language for user-facing responses, verification plans, final summaries, and docs notes. Keep code symbols, file paths, SQL, endpoints, commands, and exact error strings unchanged.
 
 **Required:**
-- In Phase 0, present and get approval for the verification plan before live work.
-- Before approval, do not run curl, sample DB data, start services, generate/execute harnesses, or run payloads against shared envs.
-- After approval, at least one verifier subagent performs real verification.
+- In Phase 0, state the target and verification plan. Reuse existing authorization; ask only for missing target/data permissions.
+- Prepare harnesses and inspect code within scope. Before live calls or data sampling, verify the target and side effects are authorized; do not run unapproved shared-environment mutations.
+- Perform verification directly; delegate bounded independent cases only when useful, available, and authorized.
 - Verifier subagents write only under the ticket folder: `harness/*.sh`, `fixtures/*.json`, `runs/run-<N>.log`.
 - The main agent writes the approved plan, verifier work log, and result matrix to `<artifact-root>/.backend/<YYYYMM>/<slug>/verify.md`.
 - If a `/work` docs entry exists, append only a `Verification (/verify)` section to that file. In standalone mode, do not create a new docs entry.
@@ -133,7 +130,7 @@ See `verify-template.md` for the exact `verify.md` format and `curl-harness.md` 
 - prod payload run.
 - audit/stg run without explicit user instruction.
 - Substituting unit tests or code reading for a reachable endpoint.
-- Proceeding solo when subagents are unavailable unless the user explicitly waives the requirement.
+- Delegating without a bounded task, available tools, and authorization.
 
 **Verifier handoff:**
 `scope`, `artifacts`, `commands`, `result matrix rows`, `failures/blockers`, `redaction notes`.
@@ -146,7 +143,7 @@ See `verify-template.md` for the exact `verify.md` format and `curl-harness.md` 
 - Escalate = `FAIL-APP` creates bounded `/work` delta with user approval; `FAIL-CONTRACT` returns to `/explore`; `FAIL-ENV`/`FAIL-DATA` asks user for env/data.
 
 **Final response:**
-Report the absolute `verify.md` path, status, endpoint/variant pass-fail, main-agent work, verifier work, and blockers, then STOP.
+Report the absolute `verify.md` path, status, endpoint/variant pass-fail, work performed and, if delegated, verifier ownership, and blockers, then STOP.
 
 ## The Seven Phases
 
@@ -181,9 +178,9 @@ Complete each phase before the next. Do not interleave. The loop between Phase 4
 - harness/run-log artifact plan
 - assertion plan
 - subagent assignment plan
-- explicit "waiting for approval before live verification"
+- existing authorization or the specific missing permission
 
-Then **STOP** until the user approves the plan. Do not source DB payloads, start services, generate harness files, run curl, or dispatch verifier subagents before approval.
+Continue the authorized checks. Pause only dependent live actions when the environment, account, endpoint, or mutation scope needs a decision; preparation does not require another approval.
 
 ### Phase 1 — Payload Sourcing
 
@@ -210,7 +207,7 @@ Bug fixes get one additional mandatory variant:
 
 Write each variant to `fixtures/<endpoint>.<variant>.json`. For GET/DELETE requests without a JSON body, the fixture still records the full request shape: method, path, query parameters, path variables, headers that affect behavior, and expected assertions. Never commit raw PII — apply redaction before write.
 
-This phase is performed by verifier subagents after plan approval. Each subagent records fixture paths, source category, redaction decisions, and any sample-query shape it used.
+Record fixture paths, source category, redaction decisions, and any sample-query shape used. A delegated verifier returns the same evidence.
 
 ### Phase 2 — Harness Generation
 
@@ -244,7 +241,7 @@ Cache the token in `_env.sh` for the run; never paste it into fixture files. Tok
 
 **Do not generate harness files for endpoints you cannot reach in the selected target.** If the target service cannot start or is unreachable (missing downstream, auth unavailable, wrong profile), stop, record it in `verify.md §9` as `[BLOCK]`, and ask the user.
 
-This phase is performed by verifier subagents after plan approval. Each subagent owns only the harness files assigned in the approved plan.
+If delegated, each verifier owns only its assigned harness files.
 
 ### Phase 3 — Execution
 
@@ -270,7 +267,7 @@ POST /users/login regression  500     154          1/3         ✗
 
 If any service fails to start or a probe times out, record the actual error and stop — do not retry silently.
 
-This phase is performed by verifier subagents after plan approval. Each subagent must return the exact command(s), run-log paths, matrix rows, and pass/fail classification for its assigned endpoint or cross-service probe. The main agent reviews and synthesizes; it does not silently replace missing subagent evidence with a passing claim.
+Record exact commands, run-log paths, matrix rows, and pass/fail classifications. Review any delegated evidence before incorporating it; missing evidence cannot become a passing claim.
 
 ### Phase 4 — Triage
 
@@ -304,8 +301,8 @@ This delta is the input to Phase 5. It is also saved into `verify.md §7` for th
 
 For each fail classification:
 
-1. Present the rework delta to the user in chat. Ask: "Trigger `/work` with this delta, or stop here?"
-2. On **user accept**: invoke `/work` with explicit scope limited to the delta. Pass the delta as the opening message and point `/work` at the same `<YYYYMM>/<slug>` folder. `/work` appends a new entry to its `work.md §2 Contract Adherence` ("rows added mid-flight via /verify rework delta #N"). Do not let `/work` widen scope beyond the delta.
+1. State the rework delta. If fixing the failure is already authorized, proceed within that scope; for verification-only requests, ask before changing source.
+2. With **existing or new authorization**: invoke `/work` with explicit scope limited to the delta. Pass the delta as the opening message and point `/work` at the same `<YYYYMM>/<slug>` folder. `/work` appends a new entry to its `work.md §2 Contract Adherence` ("rows added mid-flight via /verify rework delta #N"). Do not let `/work` widen scope beyond the delta.
 3. On **user reject / hold**: stop. Write `verify.md` with `status: fail-user-required` and the delta as the question.
 4. After `/work` returns, **re-run Phase 3 (execution)** with the same harness — do not regenerate fixtures unless the contract itself changed. Append to `runs/run-<N+1>.log`.
 5. Compare iteration N+1 to iteration N. **Meaningful progress** = at least one of:
@@ -318,7 +315,7 @@ For each fail classification:
 6. Escalation ladder:
 
 ```
-iteration 1 fails           → generate new rework delta, ask user, go to Phase 5 step 2
+iteration 1 fails           → generate scoped rework delta; follow Phase 5 authorization
 iteration 2 fails AND no progress vs iter 1
                             → STOP the /work loop.
                               Ask user: (a) re-run /explore (contract may be wrong),
@@ -375,43 +372,7 @@ Then **STOP**. Do not commit, push, or open a PR. `/verify`, like `/work`, ends 
 | Redacting PII before saving fixtures | Pasting real user data into any file under `.backend/` |
 | Appending a "Verification" section to today's docs entry | Creating a brand-new docs entry (that is `/work`'s job) |
 | Frontend E2E via browser automation (if a companion skill exists) | Frontend QA without a companion skill — out of scope, say so and stop |
-| Dispatching verifier subagents after plan approval | Running actual verification solo without user waiver |
-
-## Red Flags — STOP and Restart Phase
-
-If you catch yourself thinking:
-
-- "I'll skip the happy-path assertion and just check the status code."
-- "The response looks right, I don't need to diff it against `§5B.contract`."
-- "I'll mock the downstream service — it's faster than starting it."
-- "`BASE_URL=https://stg-...` is fine even though the user did not explicitly ask for stg." **(absolute stop)**
-- "`BASE_URL=https://prod-...` is fine for one quick check." **(absolute stop)**
-- "The DB row has the user's real email; I'll commit the fixture as-is."
-- "Iteration 2 failed but I feel iteration 3 will fix it — let me just try once more past the cap."
-- "The user already accepted iteration 1, I'll keep re-invoking `/work` without checking in."
-- "`/work` finished. The build passed, so I'll skip the curl and just write `verify.md`."
-- "One assertion failed but it's a flaky test — I'll mark it pass."
-- "The Feign cross-service check failed but my endpoint passed — that's not my problem."
-- "The endpoint list is obvious, so I'll skip the plan and start curl now."
-- "The plan was approved, so I can do the curl myself without verifier subagents."
-- "The verifier said it passed, so I don't need to inspect the run log or matrix."
-- "The final answer can just say pass without explaining what each verifier did."
-
-**All of these mean: STOP. Return to the phase that enforces the missing discipline.**
-
-## Common Rationalizations
-
-| Excuse | Reality |
-|---|---|
-| "Unit tests passed, curl is overkill" | Unit tests do not exercise the HTTP filter chain, deserialization, auth, or the response envelope wrapper. Curl does. |
-| "The endpoint is internal, no one calls it externally" | Internal-only Feign endpoints still have a contract. Breaking it crashes the caller service. |
-| "DB sampling is slow; I'll invent the payload" | Invented payloads have invented shapes. Real rows have nulls, leading zeros, Korean text, and 6-year-old legacy enum values. Sampling finds these. |
-| "The user said 'verify it works' — happy path is enough" | "Works" in legacy code means "doesn't crash on any input type that exists in the DB." One variant is not verification. |
-| "I'll re-invoke `/work` without asking; we already discussed it" | Every re-invocation changes code. Every code change needs explicit consent, not assumed consent. |
-| "Iteration cap is arbitrary; I can keep going" | The cap exists because unproductive loops burn trust and signal a contract problem. Past the cap, escalate — that is the correct action, not the failure mode. |
-| "Performance numbers vary; I won't record them" | You do not need to pass a SLA. You need to record the number so regressions are detectable. Absence of a baseline is itself a regression. |
-| "A verification plan slows things down" | The plan is the safety gate: it exposes target env, payload shape, mutation risk, and assertions before live calls run. |
-| "Subagents are optional for verification" | Verifier subagents create an auditable execution trace: who ran which endpoint, what files/logs they produced, and what evidence the main agent accepted. |
+| Optional bounded verifier delegation | Overlapping or unreviewed delegated work |
 
 ## Integration with Other Skills
 
@@ -442,7 +403,7 @@ This skill is self-contained — the plan gate, fresh-output rule, and verifier-
 
 | Phase | Input | Output | Fail state → |
 |---|---|---|---|
-| 0. Load Contract | `explore.md` + `work.md` (or user spec) | Verification plan + subagent assignment plan; wait for approval | No endpoints / blocked work → stop, ask user |
+| 0. Load Contract | `explore.md` + `work.md` (or user spec) | Verification plan + any delegated assignments; resolve missing authorization | No endpoints / blocked work → stop, ask user |
 | 1. Payload Sourcing | Approved plan + DB read-only access (optional) | Verifier-created fixtures per variant, PII-redacted | Can't source real shape → ask user for samples |
 | 2. Harness Generation | Fixtures + service CLAUDE.md | Verifier-created `harness/*.sh` + `_env.sh` + `_assert.sh` | Service unreachable locally → `[BLOCK]`, ask user |
 | 3. Execution | Harness + running local service | Verifier-created `runs/run-<N>.log` + results matrix | Service won't start → stop, record actual error |
@@ -458,12 +419,3 @@ This skill is self-contained — the plan gate, fresh-output rule, and verifier-
 - `Authorization:` header values in run logs → replace with `Bearer __REDACTED__`.
 - Cookies / session IDs → replace value with `__REDACTED__`.
 - If a field you cannot classify appears in a sampled row, redact it to `__UNKNOWN__` and note the field in `verify.md §4` — do not commit it.
-
-## The Bottom Line
-
-`/work` proves the code compiles, the unit tests pass, and the diff matches the plan.
-`/verify` proves the **service**, as assembled, accepts production-shaped payloads, produces documented responses, preserves cross-service contracts, and does so with fresh, recorded, replayable evidence.
-
-Until `verify.md` says `status: pass`, the change is not production-ready — regardless of how green the unit tests are.
-
-If the contract is wrong, `/verify` escalates to `/explore`. If the code is wrong, `/verify` hands a precise delta to `/work` and retries — up to the cap, then escalates. `/verify` never invents a passing result and never silently loops.

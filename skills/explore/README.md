@@ -73,7 +73,7 @@ Time budget: 5–15 minutes for most requests. Longer if the codebase has multip
 
 ## Dependencies
 
-**Runtime subagent support is required for normal `/explore`.** If subagents cannot start, the skill stops and asks the user whether to waive that requirement. The 5 phases, backward-trace procedure, and exploration-subagent technique are all inlined in `SKILL.md`.
+Delegation is optional: use bounded independent tasks when useful, available, and authorized. Direct execution follows the same evidence requirements.
 
 **Optional companion skills** (if you also use the superpowers skill pack or similar): `systematic-debugging`, `dispatching-parallel-agents`, `writing-plans`, `test-driven-development` — these overlap with the inline procedures and can be used if preferred. They are not required.
 

@@ -1,6 +1,6 @@
 ---
 name: work
-description: Use when an approved exploration report exists at <artifact-root>/.backend/<YYYYMM>/<slug>/explore.md, including service-local .backend folders, and it is time to implement the plan
+description: Implement an approved backend exploration plan with scoped code changes, verification evidence, and paired work documentation.
 ---
 
 # Work
@@ -24,7 +24,6 @@ description: Use when an approved exploration report exists at <artifact-root>/.
 
 ```
 NO CODE CHANGES UNTIL THE EXPLORATION REPORT IS LOADED AND INTERNALIZED
-NO IMPLEMENTATION WITHOUT TASK-BOUNDED SUBAGENTS AFTER CONTRACT VALIDATION
 NO COMPLETION CLAIMS UNTIL FRESH VERIFICATION EVIDENCE IS IN HAND
 NO SKILL EXIT UNTIL <artifact-root>/.backend/.../work.md AND <artifact-root>/docs/features|docs/bugs ENTRIES ARE WRITTEN
 ```
@@ -81,9 +80,9 @@ See `wrap-up-template.md` (this directory) for the exact templates of the two do
 **Language:** Match the user's language for user-facing responses, final summaries, and human-facing docs. Keep code symbols, file paths, SQL, endpoints, commands, and exact error strings unchanged.
 
 **Required:**
-- Phase 0 validates `explore.md`; after that, at least one implementation subagent performs code changes.
+- Phase 0 validates `explore.md`. Implement directly unless a bounded independent task justifies available, authorized delegation.
 - The main agent splits §7/§9 into non-overlapping work units and states file/module ownership.
-- Non-trivial, shared, or multi-file changes get a separate verification/review subagent.
+- Use an independent reviewer when the risk warrants one and delegation is available and authorized.
 - The main agent reviews subagent diffs and fresh verification evidence, then writes `<artifact-root>/.backend/<YYYYMM>/<slug>/work.md`.
 - Features/refactors write `<artifact-root>/docs/features/<YYYY-MM-DD>-<slug>.md`; bug fixes write `<artifact-root>/docs/bugs/<YYYY-MM-DD>-<slug>.md`.
 - If a docs entry already exists for the same date, do not overwrite it; use `-part2`, `-part3`, and so on.
@@ -93,7 +92,7 @@ See `wrap-up-template.md` (this directory) for the exact templates of the two do
 - Editing code before `explore.md` has been validated.
 - Assigning overlapping write sets to two subagents at the same time.
 - Claiming completion without reviewing subagent handoffs.
-- Proceeding solo when subagents are unavailable unless the user explicitly waives the requirement.
+- Delegating without a bounded task, available tools, and authorization.
 
 **Subagent handoff:**
 `scope`, `files changed`, `tests/commands`, `result`, `blockers`, `scope drift`.
@@ -106,7 +105,7 @@ See `wrap-up-template.md` (this directory) for the exact templates of the two do
 - Escalate = `FAIL-SCOPE`/`FAIL-CONTRACT` stops coding and returns to `/explore` or user approval; do not silently widen implementation.
 
 **Final response:**
-Report the absolute `work.md`/docs paths, main-agent work, subagent work, verification result, and remaining blockers, then STOP.
+Report the absolute `work.md`/docs paths, work performed and, if delegated, agent ownership, verification result, and remaining blockers, then STOP.
 
 ## The Six Phases
 
@@ -124,7 +123,7 @@ Complete each phase before the next. Do not interleave.
    - §10 Open Questions has no `[BLOCK]` items still unresolved
 4. If any validation fails → **STOP**. Tell the user what's missing, suggest returning to `/explore` or resolving the blocker. Do not compensate by guessing.
 
-**Output of this phase:** a one-paragraph restatement of the plan in your own words, proving you read it. Then a TaskCreate list mirroring §7 + §9 one task per change unit, followed by explicit subagent assignments with owner, write scope, expected tests, and handoff requirements.
+**Output of this phase:** a one-paragraph restatement of the plan in your own words, proving you read it. Then a TaskCreate list mirroring §7 + §9 one task per change unit, with owner, write scope, expected tests, and handoff requirements for any delegated units.
 
 ### Phase 1 — Reuse & Discipline Re-check
 
@@ -144,9 +143,9 @@ If a subagent performed any part of the re-check, record which agent checked whi
 
 **Test-Driven Development discipline (inline — no external skill required):**
 
-Every change unit follows Red → Green → Verify → Refactor. Skipping the RED step is the most common way this phase fails — the test must be *seen* failing for the right reason before any implementation code is written. This is not ceremony; it is the proof that the test actually exercises the behavior you think it does.
+For a behavior change, follow Red → Green → Verify → Refactor: demonstrate that the test fails for the intended behavior before implementing. For a behavior-preserving refactor, establish passing characterization coverage instead; do not manufacture a failing test for unchanged behavior. Documentation-only changes use the relevant content checks.
 
-For each change unit (in the order listed in §7):
+For each behavior-changing unit (in the order listed in §7):
 
 ```
 RED  →  Write ONE failing test that pins the behavior from §9 Test Plan
@@ -154,7 +153,7 @@ RED  →  Write ONE failing test that pins the behavior from §9 Test Plan
          (missing code, not typos).
 
 GREEN →  Write the minimum code in the file §7 named. No speculative
-         branches. No parameters §7 didn't ask for. No refactors.
+         branches. No unrelated parameters or refactors.
 
 VERIFY→  Re-run the one test. Then run the service's focused test
          command (e.g. `./gradlew :example-api:test --tests '<class>'`).
@@ -164,11 +163,11 @@ REFACTOR→ Only if the change unit introduced duplication with itself.
          Do NOT refactor adjacent untouched code — that's scope creep.
 ```
 
-Each change unit should be assigned to a subagent unless it is pure main-agent glue after integration. The subagent must perform the Red → Green → Verify → Refactor loop for its unit and return:
+For a delegated unit, the agent follows the same verification requirements and returns:
 
 - assigned scope and files touched
 - test added/edited
-- RED command + failing reason
+- RED command + failing reason for behavior changes, or passing baseline for pure refactors
 - GREEN/VERIFY command + result
 - any follow-up or blocker
 
@@ -197,11 +196,9 @@ If you find anything "while I'm here"-style, revert it. Capture genuine findings
 
 ### Phase 4 — Verification (Evidence-First)
 
-**Fresh-output rule (inline — no external skill required):**
+Record the command, actual outcome, and evidence location for checks covering the final state. Reuse current results when inputs have not changed; rerun after relevant edits, failures, or unresolved concerns. Do not claim an unrun or blocked check passed.
 
-"The tests passed" is not a claim. "Here is the exact command I just ran and here are the last 10 lines of its output" is a claim. Every verification below must be run in the current session, with its command and its real output recorded in `work.md`. Paraphrased results, remembered results from an earlier run, or results transcribed from memory are forbidden — they are the single most common path to shipping broken code confidently.
-
-Minimum verifications — you must run each and record the command + result in `work.md`:
+Applicable verifications — run those required by §9 and the touched surface, and record the command + result in `work.md`:
 
 | Target | Command (examples — adapt to the service) |
 |---|---|
@@ -211,14 +208,11 @@ Minimum verifications — you must run each and record the command + result in `
 | Regression focus from §9 | The specific test names the report called out |
 | Manual smoke (if §9 requires it) | The exact curl / browser steps the report listed, with observed result |
 
-For **bug fixes**, also run the red-green regression cycle:
-1. With your fix applied → the new regression test passes.
-2. Temporarily revert only the fix → the new regression test **must fail**. Record the failing output.
-3. Re-apply the fix → test passes again.
+For **bug fixes**, retain evidence that the regression test fails for the original symptom and passes after the fix. Reuse the Phase 2 red/green evidence when it covers the final test and code. If the negative control is missing, run it in an isolated fixture or worktree rather than temporarily undoing shared working-tree edits.
 
 If a verification step fails, **stop claiming progress**. Fix or revert, re-run, record the actual output. Never paraphrase test results — paste the relevant line.
 
-For non-trivial changes, dispatch a verification/review subagent after implementation and before Phase 5. The verifier must inspect the final diff against `explore.md §7`, run or review the required checks, and report residual risk. The main agent may not replace this with an unreviewed self-check unless the user waived subagents.
+Review the final diff against `explore.md §7` and the required evidence. When an independent review is warranted, give the reviewer a bounded read-only assignment and record residual risk; agent agreement alone is not proof.
 
 ### Phase 5 — Wrap Up (Paired Documentation)
 
@@ -229,7 +223,7 @@ Write both artifacts using `wrap-up-template.md` in this directory.
 
 Both files are required. Do not skip either.
 
-`work.md` must include the subagent work log. If the main agent made final glue edits after subagent handoff, list those separately so future readers can distinguish subagent work from integration work.
+`work.md` must include the work log, naming delegated ownership when applicable. If the main agent made final glue edits after subagent handoff, list those separately so future readers can distinguish subagent work from integration work.
 
 Create parent folders (`<artifact-root>/docs/features/`, `<artifact-root>/docs/bugs/`) if they do not yet exist. Use today's date (from the injected `currentDate`, not a guess) for the filename.
 
@@ -255,38 +249,6 @@ Then **STOP**. Do not commit, push, or open a PR unless the user explicitly asks
 | Running tests, lint, build | Running migrations, touching prod DB, deploying |
 | Dispatching subagents with disjoint ownership | Letting subagents broaden scope or overwrite each other |
 | Asking the user to re-run `/explore` if the plan is wrong | Silently diverging from the plan |
-
-## Red Flags — STOP and Restart Phase
-
-If you catch yourself thinking:
-
-- "The report missed this file but I'll just edit it anyway."
-- "The test in §9 is overkill — I'll write a simpler one."
-- "I'll skip the red-green cycle for this bug, I'm confident in the fix."
-- "`extend` in §6 is close enough to `new` — I'll just add a helper."
-- "While I'm in this file I'll also clean up this unrelated method."
-- "The build passes, no need to run the focused tests."
-- "I'll write `work.md` later; the code change is the real deliverable."
-- "The human doc is a formality; one sentence is enough."
-- "Open question §10 isn't blocking — I'll decide it myself."
-- "Feign signature change is small; downstream is probably fine."
-- "I'll just do `/work` myself because spawning subagents takes longer."
-- "The subagent said it was done, so I don't need to inspect its diff."
-- "The final answer can say 'implemented' without explaining what each agent did."
-
-**All of these mean: STOP. Return to the phase that enforces the missing discipline.**
-
-## Common Rationalizations
-
-| Excuse | Reality |
-|---|---|
-| "The report is slightly wrong; I'll quietly fix it in code" | Quiet divergence between plan and code is how legacy codebases rot. Update the plan, or stop and ask. |
-| "Reuse re-check is duplicate work; it was done in `/explore`" | The codebase moves. A 2-week-old grep is stale. Re-check is 5 minutes; duplicate logic is forever. |
-| "TDD adds ceremony for a simple change" | Simple changes break in legacy code with hidden coupling. The failing test is your proof the symptom was real. |
-| "I know the test passes; I don't need to rerun it" | No fresh output = no claim. Re-run it now, paste the output into `work.md`. |
-| "Docs are for the end-of-sprint retro, not per change" | Per-change docs are how reviewers + non-devs track shipped work. Paired `explore.md`/`work.md` is how *you* reload context in two weeks. |
-| "Cross-service impact is the DevOps team's problem" | Feign/Kafka/SSE contracts cross service boundaries by construction. If you edited the contract, you own the downstream impact statement. |
-| "Subagents are optional because I understand the plan" | The point is execution traceability. `/work` must show who changed what, what evidence they produced, and how the main agent integrated it. |
 
 ## Integration with Other Skills
 
@@ -333,10 +295,3 @@ In `work.md`, cite everything the same way `explore.md` does:
 - If a claim is approximate, mark it with `~` — do not fabricate precise line numbers
 
 In `<artifact-root>/docs/features` / `<artifact-root>/docs/bugs`, prefer plain language prose; cite only when the reader would need to jump to the code (API endpoint paths, config keys, migration ids).
-
-## The Bottom Line
-
-`/explore` produces the contract.
-`/work` fulfills the contract, verifies the fulfillment, and leaves a paired paper trail.
-
-The job is not "write the best code you could write from scratch." The job is **"ship exactly what the contract specified, cleanly, reusing what exists, and prove it works."** If that reveals the contract was wrong, stop and fix the contract — don't fix it in silence.
