@@ -159,7 +159,7 @@ work_ref: .backend/<YYYYMM>/<slug>/work.md
 - Unit/integration tests: <pass count / total>
 - Lint/typecheck: <pass>
 - Manual verification: <scenario in 1-2 lines, or "not applicable">
-- Regression cycle for bugs: <revert -> fail confirmed -> re-apply -> pass confirmed>
+- Regression cycle for bugs: <baseline failure and final pass evidence; reuse Phase 2 receipts or an isolated negative control>
 
 ## Known Limits / Follow-Ups
 
