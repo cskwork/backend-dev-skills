@@ -17,36 +17,33 @@ Before changing legacy code, you must understand it. Guessing creates duplicatio
 - **Minimal blast radius** — touch only code that traces directly to the request
 - **Style match** — follow existing patterns even if you'd do it differently
 
-**Violating the letter of this process is violating the spirit.** A half-evidenced report is not a report.
-
 ## The Iron Law
 
 ```
-NO EXPLORATION WITHOUT TASK-BOUNDED SUBAGENTS AFTER REQUEST CLASSIFICATION
 NO CODE CHANGES UNTIL THE EXPLORATION REPORT IS DELIVERED AND APPROVED
 NO FINAL CONCLUSION WITHOUT EXPLAINING THE EXPLORATION STEPS AND REASONING PATH
 ```
 
-The report is the deliverable. Implementation is a separate step that happens only after the user reviews and confirms the plan.
+The report is the deliverable. Implementation is a separate step requiring an agreed scope; reuse existing authorization rather than demanding a second confirmation.
 
 ## Execution Rules
 
 **Language:** Match the user's language for user-facing summaries and human prose sections. Keep code symbols, file paths, SQL, endpoints, commands, and exact error strings unchanged.
 
 **Required:**
-- After Phase 0 classifies Bug / Feature / Refactor, use at least one exploration subagent for non-trivial investigation.
+- Use a bounded read-only subagent only when independent exploration reduces work or uncertainty and delegation is available and authorized. Otherwise investigate directly.
 - Assign each subagent a read-only scope: one service, layer, DB/schema area, or hypothesis.
 - The main agent reviews subagent evidence, drops uncited claims, and writes `<artifact-root>/.backend/<YYYYMM>/<slug>/explore.md`.
 - For single-service/module scope, use that service directory as artifact root; for multi-service/repo-wide scope, use repo root.
 - If `explore.md` already exists, do not overwrite it; create `explore-v2.md`, `explore-v3.md`, and so on.
-- `explore.md §12` records each subagent's search steps and reasoning log.
+- `explore.md §12` records the search trail, evidence-based rationale, and any delegated ownership.
 - Explain difficult background terms at first use in user-facing summaries. Example: `identifier` = a stable value used to find the same record, screen, or user again.
 
 **Forbidden:**
 - Editing code before `explore.md` is approved.
 - Asking a subagent to edit files, revert changes, or implement code.
 - Returning conclusions without search steps and reasoning.
-- Proceeding solo when subagents are unavailable unless the user explicitly waives the requirement.
+- Delegating without a bounded task, available tools, and authorization.
 
 **Subagent handoff:**
 `scope`, `steps`, `evidence(file:line)`, `hypotheses kept/rejected`, `conclusion`, `uncertainty`, `next search`.
@@ -59,15 +56,7 @@ The report is the deliverable. Implementation is a separate step that happens on
 - Escalate = if conclusion needs plan-outside evidence or runtime proof, stop and ask; do not turn exploration into `/work` or `/verify`.
 
 **Final response:**
-Use this response order, then STOP:
-1. `Executive Summary:`
-2. `Recommended Change:`
-3. `Rationale:`
-4. `Terms:`
-5. `Agent Findings:`
-6. `Search Order:`
-
-`Executive Summary:` includes the full `explore.md §1 Executive Summary` as Markdown. Put the absolute `explore.md` path in the first or last sentence of the same section. Do not only state the conclusion; explain which hypotheses the evidence accepted or rejected in `Rationale:`.
+Give the conclusion, material evidence and uncertainty, recommended change, and absolute report path. Include only the terms or investigation detail needed to assess the result.
 
 ## When to Use
 
@@ -108,7 +97,7 @@ Find where the request lives in the codebase.
 
 **Record:** every relevant `file_path:line_number`, what the symbol does in one sentence.
 
-**Subagent dispatch:** dispatch exploration subagents in parallel when possible — one agent per service, layer, concern, or hypothesis. Each agent returns `file:line` citations plus steps taken and reasoning. Synthesize in the main thread; do not paste uncited subagent claims into the report.
+**If delegating:** assign one independent service, layer, or hypothesis per read-only task. Review returned citations and findings before using them.
 
 ### Phase 1.5: Domain & Database (Database-First) — both tracks
 
@@ -203,9 +192,9 @@ Produce the report using `report-template.md` in this directory. The format is n
 - Create `<artifact-root>/.backend/`, `<artifact-root>/.backend/<YYYYMM>/`, and the `<slug>/` subfolder if any of them do not exist
 - If an `explore.md` already exists in that folder, append a new version as `explore-v2.md`, `explore-v3.md`, … do not overwrite
 - The folder is the persistent workspace for this ticket and will also hold sibling artifacts produced by other skills — in particular `work.md` (written by `/work`) and `verify.md` (written by `/verify`). Do not create `work.md` or `verify.md` from the `/explore` skill.
-- After writing, respond in the fixed final-response order: `Executive Summary:` → `Recommended Change:` → `Rationale:` → `Terms:` → `Agent Findings:` → `Search Order:`. In `Executive Summary:`, include the full `explore.md §1 Executive Summary` as Markdown, not only the artifact path.
+- After writing, summarize the result and link the report; do not duplicate its full contents in chat.
 
-Then **STOP**. Wait for the user to confirm before any implementation.
+The exploration deliverable ends here. Continue into implementation only when the user has authorized it; a research-only request never authorizes source edits.
 
 ## Output Format (Strict)
 
@@ -240,44 +229,12 @@ See `report-template.md` for the full template with the symbol legend. Required 
 
 | Signal | Action |
 |--------|--------|
-| Any non-trivial explore task | Dispatch at least one exploration subagent after Phase 0 |
-| Codebase has 3+ services to search | Dispatch one exploration subagent per service/concern in parallel |
+| Independent investigation would reduce uncertainty | Consider a bounded read-only subagent |
+| Several services are involved | Trace their contracts; delegate only independent useful work |
 | User says "just fix it quickly" | Still produce the report — it will be short if the bug is small |
 | You cannot reproduce the bug | Say so in Executive Summary and Open Questions |
 | "New utility needed" feels right | Re-run the reuse checklist before proposing it |
 | Blast radius list has 10+ items | Scope is wrong — narrow the change or split the task |
-
-## Red Flags — STOP and Restart Phase
-
-If you catch yourself thinking:
-- "I've seen this pattern before, I'll just write the fix"
-- "Evidence is obvious, skipping citations"
-- "The user is in a hurry, skip the executive summary"
-- "I'll add a new helper — probably nothing like it exists"
-- "Blast radius looks fine, I won't list the callers"
-- "This is similar enough to X, I don't need to read X fully"
-- "I'll figure out tests when I implement"
-- "The table name is obvious from the entity, no need to check the schema"
-- "I know the columns from the DTO — skipping DESCRIBE"
-- "I'll just add a column, indexes and FKs don't matter here"
-- "I'll explore solo because I already know where the issue is"
-- "The subagent concluded X, so I don't need to explain the reasoning"
-- "The final response can just summarize the conclusion without the steps"
-
-**All of these mean: STOP. Return to the phase that produces the missing evidence.**
-
-## Common Rationalizations
-
-| Excuse | Reality |
-|--------|---------|
-| "Simple change, no report needed" | Simple changes in legacy code still have non-obvious dependents. 10 minutes of exploration prevents a 2-hour incident. |
-| "Executive summary is fluff" | Non-devs approve/route this work. Without the summary, the report is unusable for reporting. |
-| "I'll cite files later when I write code" | "Later" erases the audit trail and invites fabrication. Cite as you find. |
-| "New utility is cleaner than adapting the existing one" | Cleanness is a local optimum. The codebase optimum is one way to do each thing. |
-| "Blast radius is intuitive, no need to list" | Intuition misses Feign clients, Kafka consumers, SSE channels, cache keys. List them. |
-| "Root cause and fix are the same thing" | No. Root cause is a statement about the code. Fix is a proposal. The report must separate them. |
-| "Subagents are optional during exploration" | The point is to make discovery auditable: who checked which path, what evidence they found, and why the conclusion follows. |
-| "Reasoning belongs only in my head" | The user needs to monitor the exploration path. Report the steps and evidence-based reasoning, not just the final answer. |
 
 ## Reuse and Low-Coupling Discipline
 
@@ -314,10 +271,6 @@ See `reuse-checklist.md` for the full checklist. Summary:
 This skill is self-contained. The following are optional enhancers if present in your agent's skill registry, but their absence does not degrade `/explore`:
 
 - `systematic-debugging` — alternative formulation of Phase 2A's backward-trace discipline (already inlined above)
-- `dispatching-parallel-agents` — alternative formulation of the required exploration-subagent dispatch (already inlined above)
+- `dispatching-parallel-agents` — optional guidance for bounded exploration delegation (already inlined above)
 - `writing-plans` — follow-on: turn the approved §7 into a structured executable plan doc
 - `test-driven-development` — applies when §9 test plan items are implemented in `/work` Phase 2
-
-## The Bottom Line
-
-The explore skill's job is to replace guessing with evidence and to produce a document that a non-developer can read at the top and a developer can implement from the bottom. The report is the contract. No code before the contract.

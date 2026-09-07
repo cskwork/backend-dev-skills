@@ -26,7 +26,7 @@ User-facing responses and verification plans are Korean-first for Korean users. 
 
 ```
 Phase 0 — Load Contract      Derive endpoint target list from work.md §4 / explore.md §7.
-         Plan Checkpoint    Tell user targets/env/payloads/assertions/subagents; wait.
+         Plan Checkpoint    State targets/env/payloads/assertions; resolve missing authorization.
 Phase 1 — Payload Sourcing   Verifier subagents: user → saved → DB sample → synthesized.
 Phase 2 — Harness Generation Verifier subagents: curl + jq + assertions.
 Phase 3 — Execution          Verifier subagents: fire curl and capture raw output.
@@ -52,7 +52,7 @@ Key disciplines enforced:
 - **Real payload shapes** — fixtures come from real DB rows (redacted) or user-provided cases, not invented JSON
 - **Three variants minimum** — `happy` + `boundary` + `negative` per endpoint (plus `regression` for bug fixes)
 - **Plan before live calls** — endpoint/env/payload/assertion/subagent plan is shown to the user before execution
-- **Verifier subagents** — actual payload sourcing, harness generation, and curl execution are assigned to bounded verifier subagents
+- **Verifier subagents** — payload sourcing, harness generation, and curl execution may use bounded verifier subagents when useful
 - **Never paraphrase results** — the results matrix is copied verbatim into `verify.md`
 - **Environment-bounded blast radius** — local/dev by default; audit/stg only with explicit user instruction; prod never
 - **Bounded re-work** — 3-iteration cap prevents unproductive `/work` loops; failure after cap escalates to the user or `/explore`
@@ -111,7 +111,7 @@ Or standalone:
 /verify POST /api/v1/bookmarks with this payload: { "chapterId": "...", ... }
 ```
 
-First response should be the verification plan, not a completed run. After approval, time budget is typically 5–10 min for the first run. Re-runs are near-instant since harness/fixtures are cached per ticket.
+State the verification plan and reuse existing authorization. After resolving any missing target or data scope, time budget is typically 5–10 min for the first run. Re-runs are near-instant since harness/fixtures are cached per ticket.
 
 ## When to use
 
@@ -127,7 +127,7 @@ First response should be the verification plan, not a completed run. After appro
 
 ## Dependencies
 
-**Runtime subagent support is required for normal `/verify` execution.** If subagents cannot start, the skill stops and asks the user whether to waive that requirement. The plan gate, fresh-output rule, bounded iteration loop, and verifier-subagent dispatch are all inlined in `SKILL.md`.
+Delegation is optional: use bounded independent tasks when useful, available, and authorized. Direct execution follows the same evidence requirements.
 
 **Optional companion skills** (if you also use the superpowers skill pack or similar): `verification-before-completion`, `systematic-debugging`, `dispatching-parallel-agents` — these overlap with the inline procedures and can be used if preferred. They are not required.
 

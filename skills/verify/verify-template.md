@@ -55,7 +55,7 @@ work_ref: work.md
 
 ## 3. Verification Plan & Verifier Work Log
 
-Record the approved Phase 0 plan and the verifier-subagent handoffs. This section proves `/verify` did not start live work before the user saw the plan.
+Record the approved Phase 0 plan and the verifier-subagent handoffs. Record which user instruction authorized the target and data scope, including authorization given earlier in the session.
 
 ```
 plan_status: approved | changed-then-approved | waived
@@ -70,10 +70,10 @@ FG ContentClient.getMeta · verifier-2 · harness/fg-content-getmeta.sh, runs/ru
 main · coordinator · verify.md + docs note · reviewed subagent logs/matrix · status=pass
 ```
 
-If subagents were waived, record why:
+If no subagent was used, record the execution choice:
 
 ```
-subagent_waiver: <user-approved reason>
+subagent_waiver: <not needed, unavailable, or user-directed; retained field name for compatibility>
 ```
 
 ---
@@ -233,7 +233,7 @@ Before `/verify` exits, the following must all hold:
 
 - [ ] `verify.md` exists at `<artifact-root>/.backend/<YYYYMM>/<slug>/verify.md`.
 - [ ] §2 `status` is one of `pass | fail-escalated | fail-user-required | partial`.
-- [ ] §3 records the approved verification plan and each verifier subagent handoff, or an explicit user waiver.
+- [ ] §3 records the approved verification plan and each verifier subagent handoff, or the recorded direct-execution choice.
 - [ ] §6 matches `runs/run-<iterations>.log` byte-for-byte on the columns it cites.
 - [ ] §7 covers every cross-service edge from `explore.md §8` — either probed, or skipped with a cited reason.
 - [ ] §8 records every `/work` re-invocation, including the delta. Zero silent re-invocations.
